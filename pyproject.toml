@@ -1,0 +1,39 @@
+[tool.poetry]
+name = "studyhub-api"
+version = "0.1.0"
+description = "FastAPI stub for study documents and deadlines"
+authors = ["StudyHub Team"]
+readme = "README.md"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+email-validator = "^2.2.0"
+fastapi = "^0.115.0"
+python-multipart = "^0.0.20"
+uvicorn = { version = "^0.34.0", extras = ["standard"] }
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.14.0"
+ruff = "^0.9.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["B008"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
