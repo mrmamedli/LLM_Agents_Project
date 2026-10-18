@@ -1,0 +1,1 @@
+"""StudyHub backend package."""
