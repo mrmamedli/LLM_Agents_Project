@@ -1,0 +1,858 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "API учебных документов и дедлайнов",
+    "version": "1.0.0",
+    "description": "API для загрузки PDF, просмотра результатов фоновой обработки и управления дедлайнами.\nСессия передаётся в заголовке `Cookie: session_id=...`.\n"
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "CookieAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth"
+    },
+    {
+      "name": "Subjects"
+    },
+    {
+      "name": "Files"
+    },
+    {
+      "name": "Deadlines"
+    },
+    {
+      "name": "Calendar"
+    }
+  ],
+  "paths": {
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "register",
+        "summary": "Зарегистрировать аккаунт по email и паролю",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailPassword"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Аккаунт создан; для входа требуется подтвердить email."
+          },
+          "409": {
+            "description": "Аккаунт с таким email уже существует."
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "login",
+        "summary": "Войти в аккаунт",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailPassword"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Сессия создана.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "Cookie `session_id` с атрибутом HttpOnly.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Неверный email или пароль."
+          },
+          "403": {
+            "description": "Email не подтверждён."
+          }
+        }
+      }
+    },
+    "/api/auth/verify-email": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "verifyEmail",
+        "summary": "Подтвердить email токеном из письма",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailVerification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Email подтверждён."
+          },
+          "400": {
+            "description": "Токен недействителен или срок его действия истёк."
+          }
+        }
+      }
+    },
+    "/api/auth/verification-token/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "refreshEmailVerificationToken",
+        "summary": "Запросить новый токен подтверждения email",
+        "description": "Для неподтверждённого аккаунта создаётся новый токен, предыдущий токен\nстановится недействительным, а письмо с новым токеном отправляется на email.\n",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Запрос принят. Ответ одинаков для существующего и неизвестного email."
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "logout",
+        "summary": "Завершить сессию",
+        "responses": {
+          "204": {
+            "description": "Сессия завершена.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "Cookie `session_id` удалена.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/subjects": {
+      "get": {
+        "tags": [
+          "Subjects"
+        ],
+        "operationId": "listSubjects",
+        "summary": "Получить список предметов",
+        "responses": {
+          "200": {
+            "description": "Список предметов",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SubjectOut"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Subjects"
+        ],
+        "operationId": "createSubject",
+        "summary": "Создать предмет",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubjectCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Предмет создан",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/subjects/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SubjectId"
+        }
+      ],
+      "delete": {
+        "tags": [
+          "Subjects"
+        ],
+        "operationId": "deleteSubject",
+        "summary": "Удалить предмет",
+        "responses": {
+          "204": {
+            "description": "Предмет удалён"
+          },
+          "404": {
+            "description": "Предмет не найден"
+          }
+        }
+      }
+    },
+    "/api/subjects/{id}/files": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SubjectId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "operationId": "listSubjectFiles",
+        "summary": "Получить файлы предмета",
+        "responses": {
+          "200": {
+            "description": "Список файлов",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileOut"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Предмет не найден"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "operationId": "uploadSubjectFile",
+        "summary": "Загрузить PDF и запустить фоновую обработку",
+        "description": "Сервер сохраняет PDF, создаёт запись со статусом `uploaded` и запускает\n`agent.processor.process_file(file_id)` через BackgroundTasks.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "PDF-файл с расширением .pdf"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "contentType": "application/pdf"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Файл сохранён, обработка запущена",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Загружен файл без расширения .pdf"
+          },
+          "404": {
+            "description": "Предмет не найден"
+          },
+          "415": {
+            "description": "Неподдерживаемый тип файла"
+          }
+        }
+      }
+    },
+    "/api/files/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/FileId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "operationId": "getFileCard",
+        "summary": "Получить карточку файла",
+        "responses": {
+          "200": {
+            "description": "Файл и результаты его обработки",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileCard"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Файл не найден"
+          }
+        }
+      }
+    },
+    "/api/files/{id}/reprocess": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/FileId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "operationId": "reprocessFile",
+        "summary": "Запустить повторную обработку файла",
+        "description": "Предыдущие результаты очищаются перед запуском фоновой обработки.",
+        "responses": {
+          "202": {
+            "description": "Повторная обработка запущена"
+          },
+          "404": {
+            "description": "Файл не найден"
+          }
+        }
+      }
+    },
+    "/api/deadlines": {
+      "get": {
+        "tags": [
+          "Deadlines"
+        ],
+        "operationId": "listDeadlines",
+        "summary": "Получить дедлайны",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SubjectIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Список дедлайнов",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeadlineOut"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/deadlines/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DeadlineId"
+        }
+      ],
+      "patch": {
+        "tags": [
+          "Deadlines"
+        ],
+        "operationId": "updateDeadline",
+        "summary": "Вручную изменить дату и статус дедлайна",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeadlineUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Обновлённый дедлайн",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeadlineOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Дедлайн не найден"
+          }
+        }
+      }
+    },
+    "/api/calendar.ics": {
+      "get": {
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "exportCalendar",
+        "summary": "Экспортировать дедлайны в формате iCalendar",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SubjectIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Календарь iCalendar",
+            "content": {
+              "text/calendar": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "CookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "session_id",
+        "description": "Авторизация через Cookie: session_id=...; cookie имеет атрибут HttpOnly."
+      }
+    },
+    "parameters": {
+      "SubjectId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "UUID предмета"
+      },
+      "FileId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "UUID файла"
+      },
+      "DeadlineId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "UUID дедлайна"
+      },
+      "SubjectIdQuery": {
+        "name": "subject_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "Фильтр по UUID предмета; при отсутствии возвращаются данные всех предметов."
+      }
+    },
+    "schemas": {
+      "EmailRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
+      "EmailPassword": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "writeOnly": true
+          }
+        }
+      },
+      "EmailVerification": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Токен подтверждения из письма."
+          }
+        }
+      },
+      "SubjectCreate": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "SubjectOut": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "FileOut": {
+        "type": "object",
+        "required": [
+          "id",
+          "subject_id",
+          "filename",
+          "status",
+          "doc_type",
+          "error"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "subject_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "Статус обработки; после загрузки равен `uploaded`.",
+            "examples": [
+              "uploaded"
+            ]
+          },
+          "doc_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SummaryOut": {
+        "type": "object",
+        "required": [
+          "text",
+          "key_terms"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "key_terms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DeadlineOut": {
+        "type": "object",
+        "required": [
+          "id",
+          "file_id",
+          "subject_id",
+          "title",
+          "due_date",
+          "date_note",
+          "requirements",
+          "source_page",
+          "source_quote",
+          "status",
+          "related_files"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "file_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "subject_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "date_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source_page": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Номер страницы PDF, начиная с 1."
+          },
+          "source_quote": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "related_files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileOut"
+            }
+          }
+        }
+      },
+      "FileCard": {
+        "type": "object",
+        "required": [
+          "file",
+          "summary",
+          "deadlines"
+        ],
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/FileOut"
+          },
+          "summary": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SummaryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deadlines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeadlineOut"
+            }
+          }
+        }
+      },
+      "DeadlineUpdate": {
+        "type": "object",
+        "required": [
+          "due_date",
+          "status"
+        ],
+        "properties": {
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "DeadlineExtraction": {
+        "type": "object",
+        "description": "Внутренняя структура результата извлечения агентом.",
+        "required": [
+          "title",
+          "due_date",
+          "date_note",
+          "requirements",
+          "source_page",
+          "source_quote"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "date_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source_page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "source_quote": {
+            "type": "string"
+          }
+        }
+      },
+      "FileAnalysis": {
+        "type": "object",
+        "description": "Внутренняя структура результата анализа файла агентом.",
+        "required": [
+          "doc_type",
+          "summary",
+          "key_terms",
+          "deadlines"
+        ],
+        "properties": {
+          "doc_type": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "key_terms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "deadlines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeadlineExtraction"
+            }
+          }
+        }
+      }
+    }
+  }
+}

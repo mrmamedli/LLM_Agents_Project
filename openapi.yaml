@@ -288,7 +288,7 @@ components:
       type: apiKey
       in: cookie
       name: session_id
-      description: Авторизация через `Cookie: session_id=...`; cookie имеет атрибут HttpOnly.
+      description: 'Авторизация через Cookie: session_id=...; cookie имеет атрибут HttpOnly.'
   parameters:
     SubjectId:
       name: id
