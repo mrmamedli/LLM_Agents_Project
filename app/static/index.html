@@ -7,16 +7,105 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="topbar">
+  <main id="auth-view" class="auth-view">
+    <section class="auth-intro" aria-labelledby="auth-heading">
+      <a class="auth-logo" href="/" aria-label="StudyHub — главная">
+        <span class="auth-logo-mark" aria-hidden="true">S</span>
+        <span>StudyHub</span>
+      </a>
+      <div class="auth-copy">
+        <p class="eyebrow">Учёба без хаоса</p>
+        <h1 id="auth-heading">Все материалы и дедлайны в одном месте</h1>
+        <p>Загружайте учебные PDF, получайте краткие конспекты и не пропускайте важные даты.</p>
+      </div>
+      <ul class="auth-benefits" aria-label="Возможности StudyHub">
+        <li><span aria-hidden="true">✓</span> Конспекты из материалов</li>
+        <li><span aria-hidden="true">✓</span> Дедлайны в календаре</li>
+        <li><span aria-hidden="true">✓</span> Экспорт событий в .ics</li>
+      </ul>
+    </section>
+
+    <section class="auth-card" aria-labelledby="auth-title">
+      <div id="auth-forms">
+        <div class="auth-tabs" role="tablist" aria-label="Вход или регистрация">
+          <button id="login-tab" class="auth-tab active" type="button" role="tab" aria-selected="true" aria-controls="login-form">Войти</button>
+          <button id="register-tab" class="auth-tab" type="button" role="tab" aria-selected="false" aria-controls="register-form">Регистрация</button>
+        </div>
+
+        <div class="auth-heading">
+          <h2 id="auth-title">С возвращением</h2>
+          <p id="auth-subtitle">Войдите, чтобы продолжить работу</p>
+        </div>
+
+        <p id="auth-message" class="auth-message hidden" role="alert"></p>
+
+        <form id="login-form" class="auth-form" autocomplete="on">
+          <label class="field">
+            <span>Email</span>
+            <input id="login-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="student@example.com" required>
+          </label>
+          <label class="field">
+            <span>Пароль</span>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="Не менее 8 символов" minlength="8" required>
+          </label>
+          <button class="btn primary auth-submit" type="submit">Войти</button>
+        </form>
+
+        <form id="register-form" class="auth-form hidden" autocomplete="on">
+          <label class="field">
+            <span>Email</span>
+            <input id="register-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="student@example.com" required>
+          </label>
+          <label class="field">
+            <span>Пароль</span>
+            <input id="register-password" name="password" type="password" autocomplete="new-password" placeholder="Не менее 8 символов" minlength="8" required>
+          </label>
+          <label class="field">
+            <span>Повторите пароль</span>
+            <input id="register-password-confirm" name="password-confirm" type="password" autocomplete="new-password" placeholder="Введите пароль ещё раз" minlength="8" required>
+          </label>
+          <button class="btn primary auth-submit" type="submit">Создать аккаунт</button>
+          <p class="auth-terms">Регистрируясь, вы соглашаетесь с правилами использования сервиса.</p>
+        </form>
+      </div>
+
+      <div id="verification-view" class="verification-view hidden">
+        <div class="mail-icon" aria-hidden="true">✉</div>
+        <div class="auth-heading">
+          <h2>Подтвердите email</h2>
+          <p>Мы отправили код подтверждения на <strong id="verification-email"></strong></p>
+        </div>
+        <p id="verification-message" class="auth-message hidden" role="alert"></p>
+        <form id="verification-form" class="auth-form" autocomplete="off">
+          <label class="field">
+            <span>Код из письма</span>
+            <input id="verification-token" name="token" type="text" autocomplete="one-time-code" placeholder="Вставьте код подтверждения" required>
+          </label>
+          <button class="btn primary auth-submit" type="submit">Подтвердить</button>
+        </form>
+        <p class="verification-actions">
+          Не пришло письмо?
+          <button id="resend-verification" class="link" type="button">Отправить ещё раз</button>
+        </p>
+        <button id="back-to-login" class="link back-link" type="button">← Вернуться ко входу</button>
+      </div>
+    </section>
+  </main>
+
+  <header id="app-header" class="topbar hidden">
     <h1 class="logo">StudyHub</h1>
     <nav id="tabs" class="tabs" aria-label="Предметы"></nav>
     <form id="add-subject" class="add-subject" autocomplete="off">
       <input id="subject-name" type="text" placeholder="Новый предмет" maxlength="80" required>
       <button class="btn" type="submit">Добавить</button>
     </form>
+    <div class="account-menu">
+      <span id="account-email" class="account-email"></span>
+      <button id="logout" class="btn" type="button">Выйти</button>
+    </div>
   </header>
 
-  <main id="view" class="view"></main>
+  <main id="view" class="view hidden"></main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="app.js"></script>

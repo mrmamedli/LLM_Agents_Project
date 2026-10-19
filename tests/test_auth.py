@@ -176,6 +176,27 @@ async def test_login_sets_httponly_cookie_and_logout_revokes_session(
     assert (await client.post("/api/auth/logout")).status_code == 401
 
 
+async def test_current_user_returns_session_owner(
+    client: AsyncClient,
+    test_session_factory: TestSessionFactory,
+) -> None:
+    user = await register(client, test_session_factory)
+    await verify_registered_user(client, user)
+
+    assert (await client.get("/api/auth/me")).status_code == 401
+
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": user.email, "password": "password123"},
+    )
+    assert login.status_code == 204
+
+    response = await client.get("/api/auth/me")
+
+    assert response.status_code == 200
+    assert response.json() == {"id": str(user.id), "email": user.email}
+
+
 def test_password_verification_rejects_invalid_hashes() -> None:
     password_hash = hash_password("password123")
 

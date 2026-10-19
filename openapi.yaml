@@ -16,6 +16,20 @@ tags:
   - name: Deadlines
   - name: Calendar
 paths:
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      operationId: getCurrentUser
+      summary: Получить профиль текущего пользователя
+      responses:
+        '200':
+          description: Текущая сессия действительна.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserOut'
+        '401':
+          description: Сессия отсутствует или недействительна.
   /api/auth/register:
     post:
       tags: [Auth]
@@ -323,6 +337,16 @@ components:
         format: uuid
       description: Фильтр по UUID предмета; при отсутствии возвращаются данные всех предметов.
   schemas:
+    CurrentUserOut:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
     EmailRequest:
       type: object
       required: [email]

@@ -9,7 +9,7 @@ from starlette.concurrency import run_in_threadpool
 from app.config import Settings, get_settings
 from app.models import User, UserSession
 from app.routers.common import SessionId
-from app.schemas import EmailPassword, EmailRequest, EmailVerification
+from app.schemas import CurrentUserOut, EmailPassword, EmailRequest, EmailVerification
 from app.security import (
     SESSION_COOKIE_NAME,
     CurrentUser,
@@ -23,6 +23,11 @@ from app.services.mailer import send_verification_email
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 AppSettings = Annotated[Settings, Depends(get_settings)]
+
+
+@router.get("/me", response_model=CurrentUserOut, operation_id="getCurrentUser")
+async def get_current_user(current_user: CurrentUser) -> User:
+    return current_user
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED, operation_id="register")
