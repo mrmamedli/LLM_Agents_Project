@@ -224,7 +224,14 @@ async function register(event) {
   try {
     await api("/auth/register", jsonRequest("POST", { email, password }));
     form.reset();
-    showVerification(email);
+    try {
+      await api("/auth/login", jsonRequest("POST", { email, password }));
+      const user = await api("/auth/me");
+      await enterApp(user);
+    } catch (loginError) {
+      if (loginError instanceof ApiError && loginError.status === 403) showVerification(email);
+      else throw loginError;
+    }
   } catch (error) {
     setInlineMessage($("#auth-message"), friendlyError(error));
   } finally {

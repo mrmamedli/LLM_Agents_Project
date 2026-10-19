@@ -75,6 +75,27 @@ async def test_register_hashes_password_and_rejects_duplicate_email(
     assert sent_verification_emails == [(user.email, user.verification_token)]
 
 
+async def test_register_auto_verifies_user_when_emails_are_disabled(
+    client: AsyncClient,
+    test_session_factory: TestSessionFactory,
+    test_settings: Settings,
+    sent_verification_emails: list[tuple[str, str]],
+) -> None:
+    test_settings.emails_enabled = False
+
+    user = await register(client, test_session_factory)
+
+    assert user.is_verified
+    assert user.verification_token is None
+    assert user.verification_token_expires_at is None
+    assert sent_verification_emails == []
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": user.email, "password": "password123"},
+    )
+    assert login.status_code == 204
+
+
 async def test_login_requires_valid_credentials_and_verified_email(
     client: AsyncClient,
     test_session_factory: TestSessionFactory,

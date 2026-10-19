@@ -19,6 +19,8 @@ def build_verification_message(recipient: str, token: str, sender: str) -> Email
 
 
 async def send_verification_email(recipient: str, token: str, settings: Settings) -> None:
+    if not settings.emails_enabled:
+        return
     password = (
         settings.smtp_password.get_secret_value() if settings.smtp_password is not None else None
     )

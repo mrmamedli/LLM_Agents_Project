@@ -40,12 +40,15 @@ async def register(
     if await db.scalar(select(User.id).where(User.email == email)) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
-    verification_token = new_token()
+    verification_token = new_token() if settings.emails_enabled else None
     user = User(
         email=email,
         password_hash=await run_in_threadpool(hash_password, payload.password),
+        is_verified=not settings.emails_enabled,
         verification_token=verification_token,
-        verification_token_expires_at=expires_in(settings.verification_token_ttl_seconds),
+        verification_token_expires_at=(
+            expires_in(settings.verification_token_ttl_seconds) if verification_token else None
+        ),
     )
     db.add(user)
     try:
@@ -55,7 +58,8 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
         ) from error
-    await send_verification_email(email, verification_token, settings)
+    if verification_token is not None:
+        await send_verification_email(email, verification_token, settings)
     return Response(status_code=status.HTTP_201_CREATED)
 
 
@@ -120,7 +124,7 @@ async def refresh_verification_token(
     settings: AppSettings,
 ) -> Response:
     user = await db.scalar(select(User).where(User.email == payload.email.lower()))
-    if user is not None and not user.is_verified:
+    if settings.emails_enabled and user is not None and not user.is_verified:
         verification_token = new_token()
         user.verification_token = verification_token
         user.verification_token_expires_at = expires_in(settings.verification_token_ttl_seconds)
