@@ -1,17 +1,8 @@
-import os
 from email.message import EmailMessage
 from typing import Any
 
 import pytest
-
-os.environ.setdefault("DB_HOST", "localhost")
-os.environ.setdefault("DB_PORT", "5432")
-os.environ.setdefault("DB_USERNAME", "studyhub")
-os.environ.setdefault("DB_PASSWORD", "studyhub")
-os.environ.setdefault("DB_NAME", "studyhub")
-os.environ.setdefault("SMTP_HOST", "smtp.example.com")
-os.environ.setdefault("SMTP_PORT", "587")
-os.environ.setdefault("SMTP_FROM_EMAIL", "noreply@example.com")
+from pydantic import SecretStr
 
 from app.config import Settings
 from app.services.mailer import send_verification_email
@@ -19,6 +10,7 @@ from app.services.mailer import send_verification_email
 
 async def test_send_verification_email_builds_message_and_uses_smtp_settings(
     monkeypatch: pytest.MonkeyPatch,
+    test_settings: Settings,
 ) -> None:
     sent: list[tuple[EmailMessage, dict[str, Any]]] = []
 
@@ -26,15 +18,17 @@ async def test_send_verification_email_builds_message_and_uses_smtp_settings(
         sent.append((message, kwargs))
 
     monkeypatch.setattr("app.services.mailer.aiosmtplib.send", fake_send)
-    settings = Settings(
-        smtp_host="smtp.internal.example",
-        smtp_port=465,
-        smtp_username="mailer",
-        smtp_password="secret-password",
-        smtp_from_email="noreply@studyhub.example",
-        smtp_start_tls=False,
-        smtp_use_tls=True,
-        smtp_timeout_seconds=5,
+    settings = test_settings.model_copy(
+        update={
+            "smtp_host": "smtp.internal.example",
+            "smtp_port": 465,
+            "smtp_username": "mailer",
+            "smtp_password": SecretStr("secret-password"),
+            "smtp_from_email": "noreply@studyhub.example",
+            "smtp_start_tls": False,
+            "smtp_use_tls": True,
+            "smtp_timeout_seconds": 5.0,
+        }
     )
 
     await send_verification_email("student@example.com", "active-token", settings)

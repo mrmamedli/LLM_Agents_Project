@@ -1,33 +1,13 @@
-import os
-from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
-
-os.environ.setdefault("DB_HOST", "localhost")
-os.environ.setdefault("DB_PORT", "5432")
-os.environ.setdefault("DB_USERNAME", "studyhub")
-os.environ.setdefault("DB_PASSWORD", "studyhub")
-os.environ.setdefault("DB_NAME", "studyhub")
-os.environ.setdefault("SMTP_HOST", "smtp.example.com")
-os.environ.setdefault("SMTP_PORT", "587")
-os.environ.setdefault("SMTP_FROM_EMAIL", "noreply@example.com")
 
 from app.config import Settings
-from app.db import Base, get_db
-from app.main import app
 from app.models import User, UserSession
 from app.security import hash_password, verify_password
-
-test_engine = create_async_engine(
-    "sqlite+aiosqlite:///:memory:",
-    poolclass=StaticPool,
-)
-TestSession = async_sessionmaker(test_engine, expire_on_commit=False)
+from tests.conftest import TestSessionFactory
 
 
 @pytest.fixture(autouse=True)
@@ -44,41 +24,22 @@ def sent_verification_emails(
     return sent
 
 
-async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with TestSession() as session:
-        yield session
-
-
-@pytest.fixture(autouse=True)
-async def database() -> AsyncGenerator[None, None]:
-    app.dependency_overrides[get_db] = override_get_db
-    async with test_engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
-    yield
-    app.dependency_overrides.clear()
-    async with test_engine.begin() as connection:
-        await connection.run_sync(Base.metadata.drop_all)
-
-
-@pytest.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as test_client:
-        yield test_client
-
-
-async def get_user(email: str) -> User | None:
-    async with TestSession() as db:
+async def get_user(email: str, test_session_factory: TestSessionFactory) -> User | None:
+    async with test_session_factory() as db:
         return await db.scalar(select(User).where(User.email == email))
 
 
-async def register(client: AsyncClient, email: str = "student@example.com") -> User:
+async def register(
+    client: AsyncClient,
+    test_session_factory: TestSessionFactory,
+    email: str = "student@example.com",
+) -> User:
     response = await client.post(
         "/api/auth/register",
         json={"email": email, "password": "password123"},
     )
     assert response.status_code == 201
-    user = await get_user(email.lower())
+    user = await get_user(email.lower(), test_session_factory)
     assert user is not None
     return user
 
@@ -94,9 +55,10 @@ async def verify_registered_user(client: AsyncClient, user: User) -> None:
 
 async def test_register_hashes_password_and_rejects_duplicate_email(
     client: AsyncClient,
+    test_session_factory: TestSessionFactory,
     sent_verification_emails: list[tuple[str, str]],
 ) -> None:
-    user = await register(client, "Student@Example.COM")
+    user = await register(client, test_session_factory, "Student@Example.COM")
 
     assert user.email == "student@example.com"
     assert user.password_hash != "password123"
@@ -113,8 +75,11 @@ async def test_register_hashes_password_and_rejects_duplicate_email(
     assert sent_verification_emails == [(user.email, user.verification_token)]
 
 
-async def test_login_requires_valid_credentials_and_verified_email(client: AsyncClient) -> None:
-    user = await register(client)
+async def test_login_requires_valid_credentials_and_verified_email(
+    client: AsyncClient,
+    test_session_factory: TestSessionFactory,
+) -> None:
+    user = await register(client, test_session_factory)
 
     wrong_password = await client.post(
         "/api/auth/login",
@@ -129,11 +94,14 @@ async def test_login_requires_valid_credentials_and_verified_email(client: Async
     assert unverified.status_code == 403
 
 
-async def test_verify_email_rejects_expired_token(client: AsyncClient) -> None:
-    user = await register(client)
+async def test_verify_email_rejects_expired_token(
+    client: AsyncClient,
+    test_session_factory: TestSessionFactory,
+) -> None:
+    user = await register(client, test_session_factory)
     assert user.verification_token is not None
     token = user.verification_token
-    async with TestSession() as db:
+    async with test_session_factory() as db:
         stored_user = await db.get(User, user.id)
         assert stored_user is not None
         stored_user.verification_token_expires_at = datetime.now(UTC) - timedelta(seconds=1)
@@ -145,9 +113,10 @@ async def test_verify_email_rejects_expired_token(client: AsyncClient) -> None:
 
 async def test_refresh_rotates_token_without_disclosing_unknown_email(
     client: AsyncClient,
+    test_session_factory: TestSessionFactory,
     sent_verification_emails: list[tuple[str, str]],
 ) -> None:
-    user = await register(client)
+    user = await register(client, test_session_factory)
     old_token = user.verification_token
     assert old_token is not None
 
@@ -161,7 +130,7 @@ async def test_refresh_rotates_token_without_disclosing_unknown_email(
     )
 
     assert refreshed.status_code == unknown.status_code == 202
-    updated_user = await get_user(user.email)
+    updated_user = await get_user(user.email, test_session_factory)
     assert updated_user is not None
     assert updated_user.verification_token != old_token
     assert updated_user.verification_token is not None
@@ -181,8 +150,9 @@ async def test_refresh_rotates_token_without_disclosing_unknown_email(
 
 async def test_login_sets_httponly_cookie_and_logout_revokes_session(
     client: AsyncClient,
+    test_session_factory: TestSessionFactory,
 ) -> None:
-    user = await register(client)
+    user = await register(client, test_session_factory)
     await verify_registered_user(client, user)
 
     login = await client.post(
@@ -194,13 +164,13 @@ async def test_login_sets_httponly_cookie_and_logout_revokes_session(
     session_id = client.cookies.get("session_id")
     assert session_id is not None
 
-    async with TestSession() as db:
+    async with test_session_factory() as db:
         assert await db.get(UserSession, session_id) is not None
 
     logout = await client.post("/api/auth/logout")
     assert logout.status_code == 204
     assert "session_id=" in logout.headers["set-cookie"]
-    async with TestSession() as db:
+    async with test_session_factory() as db:
         assert await db.get(UserSession, session_id) is None
 
     assert (await client.post("/api/auth/logout")).status_code == 401
