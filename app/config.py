@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Self
 
 from pydantic import EmailStr, Field, SecretStr, field_validator, model_validator
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
         validation_alias="SMTP_TIMEOUT_SECONDS",
         gt=0,
     )
+    storage_path: Path = Field(default=Path("uploads"), validation_alias="STORAGE_PATH")
 
     @field_validator("smtp_username", "smtp_password", mode="before")
     @classmethod
