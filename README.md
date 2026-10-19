@@ -1,6 +1,4 @@
 # LLM_Agents_Project
-Репозиторий для проекта по курсу Мультиагентные системы
-
 FastAPI backend for study-document uploads, processing results, deadlines, and
 iCalendar export. The HTTP contract is defined in [`openapi.yaml`](openapi.yaml).
 
