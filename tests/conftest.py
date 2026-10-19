@@ -1,6 +1,7 @@
 import os
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -43,7 +44,7 @@ TestSession = async_sessionmaker(test_engine, expire_on_commit=False)
 
 
 @pytest.fixture
-def test_settings() -> Settings:
+def test_settings(tmp_path: Path) -> Settings:
     return Settings(
         database_host="localhost",
         database_port=5432,
@@ -53,6 +54,7 @@ def test_settings() -> Settings:
         smtp_host="smtp.example.com",
         smtp_port=587,
         smtp_from_email="noreply@example.com",
+        storage_path=tmp_path / "uploads",
     )
 
 
