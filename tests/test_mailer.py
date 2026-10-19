@@ -50,6 +50,20 @@ async def test_send_verification_email_builds_message_and_uses_smtp_settings(
     }
 
 
+async def test_send_verification_email_is_noop_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    test_settings: Settings,
+) -> None:
+    async def unexpected_send(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        pytest.fail("SMTP must not be called when emails are disabled")
+
+    monkeypatch.setattr("app.services.mailer.aiosmtplib.send", unexpected_send)
+    settings = test_settings.model_copy(update={"emails_enabled": False})
+
+    await send_verification_email("student@example.com", "unused-token", settings)
+
+
 def test_settings_rejects_conflicting_smtp_tls_modes() -> None:
     with pytest.raises(ValueError, match="cannot both be enabled"):
         Settings(smtp_start_tls=True, smtp_use_tls=True)

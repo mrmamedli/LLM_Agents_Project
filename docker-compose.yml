@@ -1,0 +1,72 @@
+services:
+  database:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-studyhub}
+      POSTGRES_USER: ${DB_USERNAME:-studyhub}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-studyhub}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_HOST: database
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-studyhub}
+      DB_PASSWORD: ${DB_PASSWORD:-studyhub}
+      DB_NAME: ${DB_NAME:-studyhub}
+      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-2592000}
+      VERIFICATION_TOKEN_TTL_SECONDS: ${VERIFICATION_TOKEN_TTL_SECONDS:-86400}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      EMAILS_ENABLED: ${EMAILS_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-localhost}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@studyhub.example.com}
+      SMTP_START_TLS: ${SMTP_START_TLS:-false}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
+      SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-10}
+      STORAGE_PATH: /app/data/uploads
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - uploads:/app/data/uploads
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  uploads:

@@ -30,11 +30,14 @@ class Settings(BaseSettings):
         gt=0,
     )
     cookie_secure: bool = Field(default=False, validation_alias="COOKIE_SECURE")
-    smtp_host: str = Field(validation_alias="SMTP_HOST")
-    smtp_port: int = Field(validation_alias="SMTP_PORT", ge=1, le=65535)
+    emails_enabled: bool = Field(default=True, validation_alias="EMAILS_ENABLED")
+    smtp_host: str = Field(default="localhost", validation_alias="SMTP_HOST")
+    smtp_port: int = Field(default=1025, validation_alias="SMTP_PORT", ge=1, le=65535)
     smtp_username: str | None = Field(default=None, validation_alias="SMTP_USERNAME")
     smtp_password: SecretStr | None = Field(default=None, validation_alias="SMTP_PASSWORD")
-    smtp_from_email: EmailStr = Field(validation_alias="SMTP_FROM_EMAIL")
+    smtp_from_email: EmailStr = Field(
+        default="noreply@studyhub.example.com", validation_alias="SMTP_FROM_EMAIL"
+    )
     smtp_start_tls: bool = Field(default=True, validation_alias="SMTP_START_TLS")
     smtp_use_tls: bool = Field(default=False, validation_alias="SMTP_USE_TLS")
     smtp_timeout_seconds: float = Field(
