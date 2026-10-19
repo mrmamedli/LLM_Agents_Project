@@ -1,16 +1,19 @@
 from datetime import date
+from typing import Any
+from uuid import UUID
 
 from icalendar import Calendar
+from icalendar.cal import Event
 
 from app.schemas import DeadlineOut
 from app.services.ics_export import export_ics
 
 
-def make_deadline(**overrides) -> DeadlineOut:
+def make_deadline(**overrides: Any) -> DeadlineOut:
     data = {
-        "id": 1,
-        "file_id": 1,
-        "subject_id": 1,
+        "id": UUID("00000000-0000-0000-0000-000000000001"),
+        "file_id": UUID("00000000-0000-0000-0000-000000000002"),
+        "subject_id": UUID("00000000-0000-0000-0000-000000000003"),
         "title": "Project proposal",
         "due_date": "2026-11-10",
         "date_note": None,
@@ -23,48 +26,50 @@ def make_deadline(**overrides) -> DeadlineOut:
     return DeadlineOut(**{**data, **overrides})
 
 
-def events_of(data: bytes) -> list:
-    return list(Calendar.from_ical(data).walk("VEVENT"))
+def events_of(data: bytes) -> list[Event]:
+    components = Calendar.from_ical(data).walk("VEVENT")
+    assert all(isinstance(component, Event) for component in components)
+    return [component for component in components if isinstance(component, Event)]
 
 
-def test_empty_list_gives_valid_calendar_without_events():
+def test_empty_list_gives_valid_calendar_without_events() -> None:
     data = export_ics([])
     assert data.startswith(b"BEGIN:VCALENDAR")
     assert events_of(data) == []
 
 
-def test_deadline_without_date_is_skipped():
+def test_deadline_without_date_is_skipped() -> None:
     data = export_ics([make_deadline(due_date=None, status="undefined")])
     assert events_of(data) == []
 
 
-def test_invalid_date_is_skipped():
+def test_invalid_date_is_skipped() -> None:
     data = export_ics([make_deadline(due_date="not-a-date")])
     assert events_of(data) == []
 
 
-def test_date_only_deadline_becomes_all_day_event():
+def test_date_only_deadline_becomes_all_day_event() -> None:
     (event,) = events_of(export_ics([make_deadline()]))
     assert event.get("dtstart").dt == date(2026, 11, 10)
     assert event.get("dtend").dt == date(2026, 11, 11)
     assert str(event.get("summary")) == "Project proposal"
 
 
-def test_deadline_with_time_keeps_time_and_timezone():
+def test_deadline_with_time_keeps_time_and_timezone() -> None:
     (event,) = events_of(export_ics([make_deadline(due_date="2026-11-10T23:59")]))
     start = event.get("dtstart").dt
     assert (start.hour, start.minute) == (23, 59)
     assert start.utcoffset().total_seconds() == 3 * 3600
 
 
-def test_description_lists_requirements_and_source_page():
+def test_description_lists_requirements_and_source_page() -> None:
     (event,) = events_of(export_ics([make_deadline()]))
     description = str(event.get("description"))
     assert "- Dockerfile" in description
     assert "стр. 2" in description
 
 
-def test_unconfirmed_date_is_marked_in_description():
+def test_unconfirmed_date_is_marked_in_description() -> None:
     deadline = make_deadline(status="needs_confirmation", date_note="in two weeks")
     (event,) = events_of(export_ics([deadline]))
     description = str(event.get("description"))
@@ -72,7 +77,12 @@ def test_unconfirmed_date_is_marked_in_description():
     assert "in two weeks" in description
 
 
-def test_events_have_unique_uids():
-    data = export_ics([make_deadline(id=1), make_deadline(id=2)])
+def test_events_have_unique_uids() -> None:
+    data = export_ics(
+        [
+            make_deadline(id=UUID("00000000-0000-0000-0000-000000000001")),
+            make_deadline(id=UUID("00000000-0000-0000-0000-000000000002")),
+        ]
+    )
     uids = {str(event.get("uid")) for event in events_of(data)}
     assert len(uids) == 2

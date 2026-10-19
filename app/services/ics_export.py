@@ -1,4 +1,5 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
+from typing import cast
 from zoneinfo import ZoneInfo
 
 from icalendar import Calendar, Event
@@ -20,7 +21,7 @@ def export_ics(deadlines: list[DeadlineOut]) -> bytes:
         event = _build_event(deadline)
         if event is not None:
             calendar.add_component(event)
-    return calendar.to_ical()
+    return cast(bytes, calendar.to_ical())
 
 
 def _parse_due(value: str) -> date | datetime | None:
@@ -43,7 +44,7 @@ def _build_event(deadline: DeadlineOut) -> Event | None:
     duration = TIMED_EVENT_DURATION if isinstance(due, datetime) else timedelta(days=1)
     event = Event()
     event.add("uid", f"deadline-{deadline.id}@studyhub")
-    event.add("dtstamp", datetime.now(timezone.utc))
+    event.add("dtstamp", datetime.now(UTC))
     event.add("summary", deadline.title)
     event.add("dtstart", due)
     event.add("dtend", due + duration)
