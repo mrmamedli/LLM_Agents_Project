@@ -21,6 +21,11 @@ class EmailVerification(ApiModel):
     token: str = Field(min_length=1)
 
 
+class CurrentUserOut(ApiModel):
+    id: UUID
+    email: EmailStr
+
+
 class SubjectCreate(ApiModel):
     name: str = Field(min_length=1, max_length=255)
 

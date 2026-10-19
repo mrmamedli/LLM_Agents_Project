@@ -21,10 +21,13 @@ const DEADLINE_STATUS = {
   undefined: "Дата не определена",
 };
 const POLL_INTERVAL_MS = 2000;
+const EMAIL_STORAGE_KEY = "studyhub.email";
 
 const state = {
+  authenticated: false,
+  accountEmail: localStorage.getItem(EMAIL_STORAGE_KEY) || "",
   subjects: [],
-  view: null, // subject id (number), "calendar" or null
+  view: null, // subject UUID, "calendar" or null
   files: [],
   selectedFileId: null,
   card: null,
@@ -58,8 +61,16 @@ function showError(message) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 5000);
 }
 
+class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function api(path, options = {}) {
-  const response = await fetch(API + path, options);
+  const response = await fetch(API + path, { credentials: "same-origin", ...options });
   const text = await response.text();
   if (!response.ok) {
     let detail = response.statusText;
@@ -68,7 +79,7 @@ async function api(path, options = {}) {
     } catch {
       // body is not JSON, keep the status text
     }
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    throw new ApiError(typeof detail === "string" ? detail : JSON.stringify(detail), response.status);
   }
   return text ? JSON.parse(text) : null;
 }
@@ -79,6 +90,207 @@ function jsonRequest(method, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   };
+}
+
+function friendlyError(error) {
+  if (!(error instanceof ApiError)) return "Не удалось связаться с сервером. Попробуйте ещё раз.";
+  const messages = {
+    "Email already registered": "Аккаунт с таким email уже существует.",
+    "Invalid credentials": "Неверный email или пароль.",
+    "Email not verified": "Сначала подтвердите email.",
+    "Invalid token": "Код недействителен или срок его действия истёк.",
+    "Not authenticated": "Войдите, чтобы продолжить.",
+    "Invalid session": "Сессия истекла. Войдите снова.",
+  };
+  if (messages[error.message]) return messages[error.message];
+  if (error.status === 422) return "Проверьте правильность заполнения полей.";
+  return error.message || "Произошла ошибка. Попробуйте ещё раз.";
+}
+
+function setBusy(form, busy) {
+  form.querySelectorAll("input, button").forEach((control) => {
+    control.disabled = busy;
+  });
+  const submit = form.querySelector('[type="submit"]');
+  if (!submit) return;
+  if (busy) {
+    submit.dataset.label = submit.textContent;
+    submit.textContent = "Подождите…";
+  } else if (submit.dataset.label) {
+    submit.textContent = submit.dataset.label;
+  }
+}
+
+function setInlineMessage(target, message = "", kind = "error") {
+  target.textContent = message;
+  target.className = `auth-message ${kind}${message ? "" : " hidden"}`;
+}
+
+// ---------- authentication ----------
+
+function rememberEmail(email) {
+  state.accountEmail = email.trim().toLowerCase();
+  localStorage.setItem(EMAIL_STORAGE_KEY, state.accountEmail);
+}
+
+function setAuthMode(mode) {
+  const loginMode = mode === "login";
+  $("#login-tab").classList.toggle("active", loginMode);
+  $("#register-tab").classList.toggle("active", !loginMode);
+  $("#login-tab").setAttribute("aria-selected", String(loginMode));
+  $("#register-tab").setAttribute("aria-selected", String(!loginMode));
+  $("#login-form").classList.toggle("hidden", !loginMode);
+  $("#register-form").classList.toggle("hidden", loginMode);
+  $("#auth-title").textContent = loginMode ? "С возвращением" : "Создайте аккаунт";
+  $("#auth-subtitle").textContent = loginMode
+    ? "Войдите, чтобы продолжить работу"
+    : "Начните собирать материалы и дедлайны";
+  setInlineMessage($("#auth-message"));
+
+  const source = loginMode ? $("#register-email") : $("#login-email");
+  const target = loginMode ? $("#login-email") : $("#register-email");
+  if (!target.value) target.value = source.value || state.accountEmail;
+}
+
+function showAuth(mode = "login", message = "", kind = "error") {
+  clearTimeout(state.pollTimer);
+  state.authenticated = false;
+  state.subjects = [];
+  state.view = null;
+  $("#app-header").classList.add("hidden");
+  $("#view").classList.add("hidden");
+  $("#auth-view").classList.remove("hidden");
+  $("#auth-forms").classList.remove("hidden");
+  $("#verification-view").classList.add("hidden");
+  setAuthMode(mode);
+  setInlineMessage($("#auth-message"), message, kind);
+}
+
+function showVerification(email, message = "") {
+  rememberEmail(email);
+  $("#auth-forms").classList.add("hidden");
+  $("#verification-view").classList.remove("hidden");
+  $("#verification-email").textContent = state.accountEmail;
+  $("#verification-token").value = "";
+  setInlineMessage($("#verification-message"), message);
+  $("#verification-token").focus();
+}
+
+async function enterApp(user) {
+  state.authenticated = true;
+  rememberEmail(user.email);
+  state.subjects = await api("/subjects");
+  $("#auth-view").classList.add("hidden");
+  $("#app-header").classList.remove("hidden");
+  $("#view").classList.remove("hidden");
+  $("#account-email").textContent = user.email;
+  if (state.subjects.length) await openSubject(state.subjects[0].id);
+  else render();
+}
+
+async function login(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const email = $("#login-email").value.trim();
+  setInlineMessage($("#auth-message"));
+  setBusy(form, true);
+  try {
+    await api("/auth/login", jsonRequest("POST", { email, password: $("#login-password").value }));
+    const user = await api("/auth/me");
+    form.reset();
+    await enterApp(user);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 403) {
+      showVerification(email, "Email ещё не подтверждён. Введите код из письма.");
+    } else {
+      setInlineMessage($("#auth-message"), friendlyError(error));
+    }
+  } finally {
+    setBusy(form, false);
+  }
+}
+
+async function register(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const email = $("#register-email").value.trim();
+  const password = $("#register-password").value;
+  if (password !== $("#register-password-confirm").value) {
+    setInlineMessage($("#auth-message"), "Пароли не совпадают.");
+    return;
+  }
+  setInlineMessage($("#auth-message"));
+  setBusy(form, true);
+  try {
+    await api("/auth/register", jsonRequest("POST", { email, password }));
+    form.reset();
+    showVerification(email);
+  } catch (error) {
+    setInlineMessage($("#auth-message"), friendlyError(error));
+  } finally {
+    setBusy(form, false);
+  }
+}
+
+async function verifyEmail(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  setInlineMessage($("#verification-message"));
+  setBusy(form, true);
+  try {
+    await api(
+      "/auth/verify-email",
+      jsonRequest("POST", { token: $("#verification-token").value.trim() }),
+    );
+    showAuth("login", "Email подтверждён. Теперь войдите в аккаунт.", "success");
+    $("#login-email").value = state.accountEmail;
+    $("#login-password").focus();
+  } catch (error) {
+    setInlineMessage($("#verification-message"), friendlyError(error));
+  } finally {
+    setBusy(form, false);
+  }
+}
+
+async function resendVerification() {
+  const button = $("#resend-verification");
+  button.disabled = true;
+  setInlineMessage($("#verification-message"));
+  try {
+    await api(
+      "/auth/verification-token/refresh",
+      jsonRequest("POST", { email: state.accountEmail }),
+    );
+    setInlineMessage(
+      $("#verification-message"),
+      "Новое письмо отправлено. Используйте код из последнего письма.",
+      "success",
+    );
+  } catch (error) {
+    setInlineMessage($("#verification-message"), friendlyError(error));
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function logout() {
+  $("#logout").disabled = true;
+  try {
+    await api("/auth/logout", { method: "POST" });
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401) showError(friendlyError(error));
+  } finally {
+    $("#logout").disabled = false;
+    showAuth("login");
+  }
+}
+
+function reportError(error) {
+  if (error instanceof ApiError && error.status === 401) {
+    showAuth("login", "Сессия истекла. Войдите снова.");
+    return;
+  }
+  showError(friendlyError(error));
 }
 
 // ---------- dates ----------
@@ -110,7 +322,7 @@ function pill(label, kind) {
 function render() {
   renderTabs();
   if (state.view === "calendar") renderCalendar();
-  else if (typeof state.view === "number") renderSubject();
+  else if (state.view !== null) renderSubject();
   else {
     $("#view").replaceChildren(
       h("p", { class: "empty" }, "Создайте первый предмет, чтобы начать загружать материалы."),
@@ -163,7 +375,7 @@ async function addSubject(event) {
     input.value = "";
     await openSubject(subject.id);
   } catch (error) {
-    showError(error.message);
+    reportError(error);
   }
 }
 
@@ -179,7 +391,7 @@ async function removeSubject(subject) {
       render();
     }
   } catch (error) {
-    showError(error.message);
+    reportError(error);
   }
 }
 
@@ -210,9 +422,9 @@ async function loadFiles() {
   const id = state.view;
   try {
     const files = await api(`/subjects/${id}/files`);
-    if (state.view === id) state.files = files.sort((a, b) => b.id - a.id);
+    if (state.view === id) state.files = files.reverse();
   } catch (error) {
-    showError(error.message);
+    reportError(error);
   }
 }
 
@@ -259,7 +471,8 @@ async function uploadFiles(files) {
     try {
       last = await api(`/subjects/${subjectId}/files`, { method: "POST", body });
     } catch (error) {
-      showError(`${file.name}: ${error.message}`);
+      if (error instanceof ApiError && error.status === 401) reportError(error);
+      else showError(`${file.name}: ${friendlyError(error)}`);
     }
   }
   if (!last || state.view !== subjectId) return;
@@ -321,7 +534,7 @@ async function loadCard() {
     const card = await api(`/files/${id}`);
     if (state.selectedFileId === id) state.card = card;
   } catch (error) {
-    showError(error.message);
+    reportError(error);
   }
 }
 
@@ -334,7 +547,7 @@ async function reprocess(fileId) {
     renderCard();
     schedulePoll();
   } catch (error) {
-    showError(error.message);
+    reportError(error);
   }
 }
 
@@ -349,7 +562,7 @@ function schedulePoll() {
 
 async function poll() {
   const viewId = state.view;
-  if (typeof viewId !== "number") return;
+  if (viewId === null || viewId === "calendar") return;
   const selected = state.files.find((file) => file.id === state.selectedFileId);
   const selectedWasActive = Boolean(selected) && ACTIVE_STATUSES.has(selected.status);
 
@@ -506,7 +719,7 @@ function dateEditor(deadline, onSaved) {
       );
       await onSaved();
     } catch (error) {
-      showError(error.message);
+      reportError(error);
     }
   }
 
@@ -585,7 +798,7 @@ async function refreshCalendar() {
     if (state.view !== "calendar" || !box) return;
     box.replaceChildren(...calendarSections(deadlines));
   } catch (error) {
-    showError(error.message);
+    reportError(error);
   }
 }
 
@@ -649,13 +862,22 @@ function calendarSections(deadlines) {
 
 async function init() {
   $("#add-subject").addEventListener("submit", addSubject);
+  $("#login-tab").addEventListener("click", () => setAuthMode("login"));
+  $("#register-tab").addEventListener("click", () => setAuthMode("register"));
+  $("#login-form").addEventListener("submit", login);
+  $("#register-form").addEventListener("submit", register);
+  $("#verification-form").addEventListener("submit", verifyEmail);
+  $("#resend-verification").addEventListener("click", resendVerification);
+  $("#back-to-login").addEventListener("click", () => showAuth("login"));
+  $("#logout").addEventListener("click", logout);
+  $("#login-email").value = state.accountEmail;
   try {
-    state.subjects = await api("/subjects");
+    const user = await api("/auth/me");
+    await enterApp(user);
   } catch (error) {
-    showError(error.message);
+    if (error instanceof ApiError && error.status === 401) showAuth("login");
+    else showAuth("login", friendlyError(error));
   }
-  if (state.subjects.length) await openSubject(state.subjects[0].id);
-  else render();
 }
 
 init();
