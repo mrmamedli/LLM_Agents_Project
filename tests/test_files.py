@@ -239,3 +239,53 @@ async def test_reprocess_clears_results_and_dispatches_owned_file(
         assert refreshed.summary_key_terms is None
         deadlines = list(await db.scalars(select(Deadline).where(Deadline.file_id == document.id)))
         assert deadlines == []
+
+
+async def test_reprocess_keeps_manually_added_deadlines(
+    client: AsyncClient,
+    authorized_session: AuthorizedSession,
+    test_session_factory: TestSessionFactory,
+    processed_file_ids: list[UUID],
+) -> None:
+    subject = await create_subject(test_session_factory, authorized_session.user.id)
+    document = await create_document(test_session_factory, subject.id, status="done")
+    async with test_session_factory() as db:
+        db.add_all(
+            [
+                Deadline(
+                    file_id=document.id,
+                    subject_id=subject.id,
+                    title="Found by agent",
+                    due_date=None,
+                    date_note=None,
+                    requirements=[],
+                    source_page=1,
+                    source_quote="Quote",
+                    status="undefined",
+                ),
+                Deadline(
+                    file_id=document.id,
+                    subject_id=subject.id,
+                    title="Added by hand",
+                    due_date="2026-11-10",
+                    date_note=None,
+                    requirements=[],
+                    source_page=None,
+                    source_quote=None,
+                    status="confirmed",
+                    is_manual=True,
+                ),
+            ]
+        )
+        await db.commit()
+
+    response = await client.post(
+        f"/api/files/{document.id}/reprocess",
+        headers=authorized_session.headers,
+    )
+
+    assert response.status_code == 202
+    assert processed_file_ids == [document.id]
+    async with test_session_factory() as db:
+        titles = list(await db.scalars(select(Deadline.title)))
+    assert titles == ["Added by hand"]

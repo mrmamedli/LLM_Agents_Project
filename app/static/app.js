@@ -636,19 +636,23 @@ function renderCard() {
       ),
     );
   }
-  if (file.status === "done") {
-    parts.push(
-      h(
-        "div",
-        { class: "section" },
-        h("h4", {}, "Дедлайны и требования"),
-        deadlines.length
-          ? deadlines.map((d) => deadlineItem(d, onDeadlineSaved))
-          : h("p", { class: "muted" }, "В этом документе дедлайнов не найдено."),
-      ),
-    );
-  }
+  parts.push(
+    h(
+      "div",
+      { class: "section" },
+      h("h4", {}, "Дедлайны и требования"),
+      deadlines.map((d) => deadlineItem(d, onDeadlineSaved)),
+      deadlines.length || active ? null : h("p", { class: "muted" }, emptyDeadlinesText(file)),
+      manualDeadlineForm({ subjectId: file.subject_id, fileId: file.id, onCreated: onDeadlineSaved }),
+    ),
+  );
   panel.replaceChildren(...parts);
+}
+
+function emptyDeadlinesText(file) {
+  return file.status === "error"
+    ? "Автоматически извлечь дедлайны не удалось. Добавьте их вручную."
+    : "В этом документе дедлайнов не найдено. Если они есть, добавьте их вручную.";
 }
 
 async function onDeadlineSaved() {
@@ -675,7 +679,11 @@ function deadlineItem(deadline, onSaved, { withSubject = false } = {}) {
     deadline.requirements.length
       ? h("ul", { class: "requirements" }, deadline.requirements.map((req) => h("li", {}, req)))
       : null,
-    h("p", { class: "source" }, `Источник: стр. ${deadline.source_page}`),
+    h(
+      "p",
+      { class: "source" },
+      deadline.is_manual ? "Добавлен вручную" : `Источник: стр. ${deadline.source_page}`,
+    ),
     deadline.source_quote ? h("blockquote", {}, deadline.source_quote) : null,
     deadline.related_files.length
       ? h(
@@ -692,7 +700,7 @@ function deadlineItem(deadline, onSaved, { withSubject = false } = {}) {
           ]),
         )
       : null,
-    withSubject
+    withSubject && deadline.file_id
       ? h(
           "p",
           {},
@@ -703,8 +711,104 @@ function deadlineItem(deadline, onSaved, { withSubject = false } = {}) {
           ),
         )
       : null,
-    dateEditor(deadline, onSaved),
+    h(
+      "div",
+      { class: "deadline-actions" },
+      dateEditor(deadline, onSaved),
+      h(
+        "button",
+        { class: "btn danger", onclick: () => removeDeadline(deadline, onSaved) },
+        "Удалить",
+      ),
+    ),
   );
+}
+
+async function removeDeadline(deadline, onDeleted) {
+  const hint = deadline.is_manual
+    ? ""
+    : "\nЕсли запустить повторную обработку файла, агент может найти его снова.";
+  if (!confirm(`Удалить дедлайн «${deadline.title}»?${hint}`)) return;
+  try {
+    await api(`/deadlines/${deadline.id}`, { method: "DELETE" });
+    await onDeleted();
+  } catch (error) {
+    reportError(error);
+  }
+}
+
+function manualDeadlineForm({ subjectId = null, fileId = null, subjects = null, onCreated }) {
+  const subjectSelect = subjects
+    ? h(
+        "select",
+        { required: true },
+        subjects.map((subject) =>
+          h("option", { value: subject.id, selected: subject.id === subjectId }, subject.name),
+        ),
+      )
+    : null;
+  const titleInput = h("input", {
+    type: "text",
+    maxlength: 512,
+    placeholder: "Например, Сдать лабораторную №2",
+    required: true,
+  });
+  const dateInput = h("input", { type: "date", required: true });
+  const timeInput = h("input", { type: "time" });
+  const requirementsInput = h("textarea", {
+    rows: 3,
+    placeholder: "Требования, по одному на строку (необязательно)",
+  });
+  const details = h("details", { class: "editor manual-deadline" });
+
+  const form = h(
+    "form",
+    {
+      class: "manual-form",
+      onsubmit: async (event) => {
+        event.preventDefault();
+        const title = titleInput.value.trim();
+        if (!title) {
+          showError("Укажите название дедлайна");
+          return;
+        }
+        const body = {
+          subject_id: subjectSelect ? subjectSelect.value : subjectId,
+          file_id: fileId,
+          title,
+          due_date: dateInput.value + (timeInput.value ? `T${timeInput.value}` : ""),
+          requirements: requirementsInput.value
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean),
+        };
+        setBusy(form, true);
+        try {
+          await api("/deadlines", jsonRequest("POST", body));
+          form.reset();
+          details.open = false;
+          await onCreated();
+        } catch (error) {
+          reportError(error);
+        } finally {
+          setBusy(form, false);
+        }
+      },
+    },
+    subjectSelect ? h("label", { class: "field-inline" }, h("span", {}, "Предмет"), subjectSelect) : null,
+    h("label", { class: "field-inline" }, h("span", {}, "Название"), titleInput),
+    h(
+      "div",
+      { class: "editor-form" },
+      h("label", { class: "field-inline" }, h("span", {}, "Дата"), dateInput),
+      h("label", { class: "field-inline" }, h("span", {}, "Время"), timeInput),
+    ),
+    h("label", { class: "field-inline" }, h("span", {}, "Требования"), requirementsInput),
+    h("button", { class: "btn primary", type: "submit" }, "Добавить дедлайн"),
+  );
+
+  details.append(h("summary", {}, "+ Добавить дедлайн вручную"), form);
+  return details;
 }
 
 function dateEditor(deadline, onSaved) {
@@ -792,6 +896,13 @@ function renderCalendar() {
         h("a", { class: "btn primary", href: exportUrl, download: "studyhub.ics" }, "Экспорт в .ics"),
       ),
     ),
+    state.subjects.length
+      ? manualDeadlineForm({
+          subjects: state.subjects,
+          subjectId: filter || state.subjects[0].id,
+          onCreated: refreshCalendar,
+        })
+      : null,
     h("div", { id: "calendar-list" }),
   );
   refreshCalendar();
@@ -815,7 +926,7 @@ function calendarSections(deadlines) {
       h(
         "p",
         { class: "empty" },
-        "Дедлайнов пока нет. Загрузите задания или правила курса, и они появятся здесь.",
+        "Дедлайнов пока нет. Загрузите задания или правила курса, и они появятся здесь, либо добавьте дедлайн вручную.",
       ),
     ];
   }

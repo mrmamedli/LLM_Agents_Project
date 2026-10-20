@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "studyhub-api"
 version = "0.1.0"
-description = "FastAPI stub for study documents and deadlines"
+description = "Backend for study documents and deadlines"
 authors = ["StudyHub Team"]
 readme = "README.md"
 packages = [{ include = "app" }]
