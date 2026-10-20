@@ -41,6 +41,8 @@ services:
     depends_on:
       database:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -67,6 +69,23 @@ services:
       backend:
         condition: service_healthy
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama serve & sleep 3 && ollama pull qwen2.5:latest && wait"]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q 'qwen2.5:latest' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
 volumes:
   postgres_data:
   uploads:
+  ollama_data:
