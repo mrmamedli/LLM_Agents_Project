@@ -21,6 +21,7 @@ def make_deadline(**overrides: Any) -> DeadlineOut:
         "source_page": 2,
         "source_quote": "Deadlines are announced in the group chat.",
         "status": "confirmed",
+        "is_manual": False,
         "related_files": [],
     }
     return DeadlineOut(**{**data, **overrides})
@@ -67,6 +68,15 @@ def test_description_lists_requirements_and_source_page() -> None:
     description = str(event.get("description"))
     assert "- Dockerfile" in description
     assert "стр. 2" in description
+
+
+def test_manual_deadline_is_exported_without_page_reference() -> None:
+    deadline = make_deadline(file_id=None, source_page=None, source_quote=None, is_manual=True)
+    (event,) = events_of(export_ics([deadline]))
+    description = str(event.get("description"))
+    assert "Добавлено вручную" in description
+    assert "стр." not in description
+    assert "None" not in description
 
 
 def test_unconfirmed_date_is_marked_in_description() -> None:

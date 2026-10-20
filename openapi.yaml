@@ -260,6 +260,32 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/DeadlineOut'
+    post:
+      tags: [Deadlines]
+      operationId: createDeadline
+      summary: Вручную добавить дедлайн
+      description: >-
+        Создаёт дедлайн без участия агента, например когда обработка недоступна
+        или агент не нашёл дату в документе. Если дата указана, статус дедлайна
+        `confirmed`, иначе `undefined`. При повторной обработке файла такие дедлайны
+        сохраняются.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeadlineCreate'
+      responses:
+        '201':
+          description: Созданный дедлайн
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadlineOut'
+        '404':
+          description: Предмет или файл не найден
+        '422':
+          description: Некорректные данные (например, неверный формат даты)
   /api/deadlines/{id}:
     parameters:
       - $ref: '#/components/parameters/DeadlineId'
@@ -280,6 +306,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeadlineOut'
+        '404':
+          description: Дедлайн не найден
+    delete:
+      tags: [Deadlines]
+      operationId: deleteDeadline
+      summary: Удалить дедлайн
+      description: >-
+        Удаляет дедлайн, найденный агентом или добавленный вручную. Дедлайн, найденный
+        агентом, появится снова, если запустить повторную обработку файла.
+      responses:
+        '204':
+          description: Дедлайн удалён
         '404':
           description: Дедлайн не найден
   /api/calendar.ics:
@@ -430,14 +468,16 @@ components:
         - source_page
         - source_quote
         - status
+        - is_manual
         - related_files
       properties:
         id:
           type: string
           format: uuid
         file_id:
-          type: string
+          type: [string, 'null']
           format: uuid
+          description: Файл, из которого получен дедлайн; null у дедлайна, добавленного вручную без файла.
         subject_id:
           type: string
           format: uuid
@@ -452,13 +492,16 @@ components:
           items:
             type: string
         source_page:
-          type: integer
+          type: [integer, 'null']
           minimum: 1
-          description: Номер страницы PDF, начиная с 1.
+          description: Номер страницы PDF, начиная с 1; null у дедлайна, добавленного вручную.
         source_quote:
-          type: string
+          type: [string, 'null']
         status:
           type: string
+        is_manual:
+          type: boolean
+          description: Дедлайн добавлен пользователем вручную, а не найден агентом.
         related_files:
           type: array
           items:
@@ -477,6 +520,30 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeadlineOut'
+    DeadlineCreate:
+      type: object
+      required: [subject_id, title]
+      properties:
+        subject_id:
+          type: string
+          format: uuid
+        file_id:
+          type: [string, 'null']
+          format: uuid
+          description: Необязательная привязка к файлу этого же предмета.
+        title:
+          type: string
+          minLength: 1
+          maxLength: 512
+        due_date:
+          type: [string, 'null']
+          description: 'Дата `YYYY-MM-DD` или дата со временем `YYYY-MM-DDTHH:MM`.'
+        requirements:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
     DeadlineUpdate:
       type: object
       required: [due_date, status]

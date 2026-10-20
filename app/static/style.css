@@ -304,7 +304,7 @@ button:disabled, input:disabled {
 .account-menu { display: flex; align-items: center; gap: 8px; }
 .account-email { max-width: 220px; overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 
-input, select {
+input, select, textarea {
   font: inherit;
   color: var(--text);
   background: var(--surface);
@@ -312,7 +312,7 @@ input, select {
   border-radius: 8px;
   padding: 7px 10px;
 }
-input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .btn {
   font: inherit;
@@ -460,6 +460,14 @@ blockquote {
 
 .editor summary { cursor: pointer; color: var(--accent); font-size: 14px; }
 .editor-form { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.deadline-actions { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.deadline-actions .editor { flex: 1; }
+.manual-deadline { margin: 8px 0 16px; }
+.manual-form { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; max-width: 560px; }
+.manual-form textarea { resize: vertical; }
+.manual-form .editor-form { margin-top: 0; }
+.manual-form .btn { align-self: flex-start; }
+.field-inline { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 
 .day { margin-bottom: 24px; }
 .day > h3 { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; text-transform: capitalize; }

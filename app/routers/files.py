@@ -155,11 +155,12 @@ async def reprocess_file(
     current_user: CurrentUser,
 ) -> Response:
     document = await get_owned_file(id, db, current_user.id)
-    deadline_ids = select(Deadline.id).where(Deadline.file_id == document.id)
+    agent_deadlines = (Deadline.file_id == document.id, Deadline.is_manual.is_(False))
+    deadline_ids = select(Deadline.id).where(*agent_deadlines)
     await db.execute(
         delete(deadline_related_files).where(deadline_related_files.c.deadline_id.in_(deadline_ids))
     )
-    await db.execute(delete(Deadline).where(Deadline.file_id == document.id))
+    await db.execute(delete(Deadline).where(*agent_deadlines))
     document.status = "uploaded"
     document.doc_type = None
     document.error = None

@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table, Text, Uuid
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table, Text, Uuid, false
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
@@ -103,8 +103,8 @@ class Deadline(Base):
     __tablename__ = "deadlines"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    file_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("files.id", ondelete="CASCADE"), index=True
+    file_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("files.id", ondelete="CASCADE"), index=True, nullable=True
     )
     subject_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("subjects.id", ondelete="CASCADE"), index=True
@@ -113,9 +113,12 @@ class Deadline(Base):
     due_date: Mapped[str | None] = mapped_column(String(64), nullable=True)
     date_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     requirements: Mapped[list[str]] = mapped_column(json_type, default=list)
-    source_page: Mapped[int] = mapped_column(Integer)
-    source_quote: Mapped[str] = mapped_column(Text)
+    source_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_quote: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(64))
+    is_manual: Mapped[bool] = mapped_column(default=False, server_default=false())
 
-    file: Mapped[DocumentFile] = relationship(back_populates="deadlines", foreign_keys=[file_id])
+    file: Mapped[DocumentFile | None] = relationship(
+        back_populates="deadlines", foreign_keys=[file_id]
+    )
     related_files: Mapped[list[DocumentFile]] = relationship(secondary=deadline_related_files)

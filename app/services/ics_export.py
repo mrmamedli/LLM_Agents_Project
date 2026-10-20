@@ -57,7 +57,9 @@ def _description(deadline: DeadlineOut) -> str:
     if deadline.requirements:
         lines.append("Требования:")
         lines.extend(f"- {requirement}" for requirement in deadline.requirements)
-    lines.append(f"Источник: стр. {deadline.source_page}")
+    lines.append(
+        "Добавлено вручную" if deadline.is_manual else f"Источник: стр. {deadline.source_page}"
+    )
     if deadline.status == "needs_confirmation":
         note = f" (в документе: {deadline.date_note})" if deadline.date_note else ""
         lines.append(f"Дата требует подтверждения{note}")
