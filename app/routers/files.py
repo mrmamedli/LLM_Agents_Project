@@ -1,6 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
+from app.routers.agent import _run_agent_background
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -18,7 +19,6 @@ from app.config import Settings, get_settings
 from app.models import Deadline, DocumentFile, Subject, deadline_related_files
 from app.schemas import DeadlineOut, FileCard, FileOut, SummaryOut
 from app.security import CurrentUser, DatabaseSession
-from app.services.processing import process_file
 from app.services.storage import delete_file, save_upload
 
 router = APIRouter(tags=["Files"])
@@ -109,7 +109,7 @@ async def upload_subject_file(
         delete_file(settings.storage_path, storage_key)
         raise
 
-    background_tasks.add_task(process_file, document.id)
+    background_tasks.add_task(_run_agent_background, id, current_user.id)
     return document
 
 
@@ -168,5 +168,5 @@ async def reprocess_file(
     document.summary_key_terms = None
     await db.commit()
 
-    background_tasks.add_task(process_file, document.id)
+    background_tasks.add_task(_run_agent_background, id, current_user.id)
     return Response(status_code=status.HTTP_202_ACCEPTED)
