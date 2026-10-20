@@ -108,7 +108,7 @@ def build_system_prompt(file_id: str) -> str:
 def _make_llm() -> ChatOpenAI:
     """Создаёт ChatOpenAI под Ollama или любой OpenAI-совместимый провайдер.
 
-    Для Ollama: timeout=180 (7B на CPU может думать долго), max_retries=2.
+    Для Ollama: timeout=600 (7B на CPU может думать долго), max_retries=2.
     """
     s = get_settings()
     return ChatOpenAI(
@@ -116,8 +116,8 @@ def _make_llm() -> ChatOpenAI:
         api_key=s.api_key,
         base_url=s.base_url,
         temperature=0,
-        # Локальная 7B-модель на CPU может отвечать 30-60 сек на запрос.
-        timeout=180,
+        # Локальная 7B-модель на CPU может отвечать несколько минут на запрос.
+        timeout=600,
         max_retries=2,
     )
 
