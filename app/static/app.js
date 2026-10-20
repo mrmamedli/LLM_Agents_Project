@@ -579,8 +579,24 @@ async function poll() {
   if (state.view !== viewId) return;
 
   renderFiles();
-  if (selectedWasActive) renderCard();
+  if (selectedWasActive) renderPolledCard();
   schedulePoll();
+}
+
+function renderPolledCard() {
+  const manualDeadline = $("#card-panel .manual-deadline");
+  if (!manualDeadline?.open) {
+    renderCard();
+    return;
+  }
+  if (manualDeadline.dataset.renderOnClose) return;
+
+  manualDeadline.dataset.renderOnClose = "true";
+  manualDeadline.addEventListener("toggle", () => {
+    if (manualDeadline.open) return;
+    delete manualDeadline.dataset.renderOnClose;
+    renderCard();
+  });
 }
 
 // ---------- file card ----------
@@ -600,6 +616,7 @@ function renderCard() {
 
   const { file, summary, deadlines } = card;
   const active = ACTIVE_STATUSES.has(file.status);
+  const existingManualDeadlineForm = panel.querySelector(".manual-deadline");
   const parts = [
     h(
       "div",
@@ -643,7 +660,8 @@ function renderCard() {
       h("h4", {}, "Дедлайны и требования"),
       deadlines.map((d) => deadlineItem(d, onDeadlineSaved)),
       deadlines.length || active ? null : h("p", { class: "muted" }, emptyDeadlinesText(file)),
-      manualDeadlineForm({ subjectId: file.subject_id, fileId: file.id, onCreated: onDeadlineSaved }),
+      existingManualDeadlineForm ||
+        manualDeadlineForm({ subjectId: file.subject_id, fileId: file.id, onCreated: onDeadlineSaved }),
     ),
   );
   panel.replaceChildren(...parts);
