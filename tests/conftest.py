@@ -18,6 +18,8 @@ os.environ.setdefault("SMTP_HOST", "smtp.example.com")
 os.environ.setdefault("SMTP_PORT", "587")
 os.environ.setdefault("SMTP_FROM_EMAIL", "noreply@example.com")
 
+os.environ.setdefault("OPENAI_API_KEY", "studyhub")
+
 from app.config import Settings, get_settings
 from app.db import Base, get_db
 from app.main import app

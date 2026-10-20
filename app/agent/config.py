@@ -77,7 +77,7 @@ def load_settings() -> Settings:
     """Загружает настройки из окружения. Должна вызываться после dotenv.load_dotenv()."""
     print("load_settings")
     return Settings(
-        api_key=_env("OPENAI_API_KEY", required=True),
+        api_key=_env("OPENAI_API_KEY",default="ollama", required=True),
         # По умолчанию — локальная Ollama.
         base_url=_env("OPENAI_BASE_URL", "http://localhost:11434/v1"),
         # По умолчанию — qwen2.5:7b (хорошо работает с tool-calling и русским).
