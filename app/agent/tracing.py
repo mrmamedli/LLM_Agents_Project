@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import logging
 import sys
-import time
 from typing import Any
 
 logger = logging.getLogger("agent_study")
@@ -35,13 +34,13 @@ def trace(run_id: str, kind: str, payload: dict[str, Any]) -> None:
     Чтобы сохранять trace в БД — переопределите эту функцию или оберните
     вызовом, который пишет в таблицу agent_runs вашего проекта.
     """
-    entry = {"t": time.time(), "run_id": run_id, "kind": kind, **payload}
-
     if kind == "agent_call":
-        logger.info("[agent] iter=%s tools=%s tokens=%s",
-                    payload.get("iteration"),
-                    payload.get("tool_calls"),
-                    payload.get("usage"))
+        logger.info(
+            "[agent] iter=%s tools=%s tokens=%s",
+            payload.get("iteration"),
+            payload.get("tool_calls"),
+            payload.get("usage"),
+        )
     elif kind == "tool_call":
         logger.info("[tool ] → %s(%s)", payload.get("name"), _short(payload.get("args")))
     elif kind == "tool_result":
@@ -49,14 +48,22 @@ def trace(run_id: str, kind: str, payload: dict[str, Any]) -> None:
     elif kind == "iteration":
         logger.info("[iter ] %s/%s", payload.get("iteration"), payload.get("max"))
     elif kind == "end":
-        logger.info("[done ] tool_calls=%s deadlines=%s summary=%s status=%s",
-                    payload.get("tool_calls"), payload.get("deadlines"),
-                    payload.get("summary"), payload.get("status"))
+        logger.info(
+            "[done ] tool_calls=%s deadlines=%s summary=%s status=%s",
+            payload.get("tool_calls"),
+            payload.get("deadlines"),
+            payload.get("summary"),
+            payload.get("status"),
+        )
     elif kind == "error":
         logger.error("[err  ] %s", payload.get("message"))
     elif kind == "start":
-        logger.info("[start] run_id=%s file_id=%s owner=%s",
-                    run_id, payload.get("file_id"), payload.get("owner_id"))
+        logger.info(
+            "[start] run_id=%s file_id=%s owner=%s",
+            run_id,
+            payload.get("file_id"),
+            payload.get("owner_id"),
+        )
 
 
 def _short(obj: Any, limit: int = 200) -> str:

@@ -26,7 +26,8 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,13 +35,16 @@ from sqlalchemy.orm import selectinload
 
 from .repository import DeadlineRecord, FileRecord, Repository
 
+if TYPE_CHECKING:
+    from app.models import Deadline
 
 # ============================================================================
 # Storage-клиент: скачивание PDF из S3/Minio по storage_key
 # ============================================================================
 
+
 class StorageClient:
-    """Тонкая обёртка над S3/Minio для скачивания PDF.
+    """Тонкая обёртка над локальным хранилищем для скачивания PDF.
 
     Адаптируйте под ваш реальный storage-сервис. Возможные варианты:
 
@@ -70,22 +74,18 @@ class StorageClient:
             return Path(key).read_bytes()
     """
 
-    def __init__(self, bucket: str = ""):
-        self._bucket = bucket
-        # Инициализация вашего реального клиента — здесь.
+    def __init__(self, root: Path):
+        self._root = root
 
-    async def download(self, storage_key: str) -> Optional[bytes]:
+    async def download(self, storage_key: str) -> bytes | None:
         """Скачивает объект по storage_key, возвращает bytes или None при ошибке.
 
         РЕАЛИЗУЙТЕ под ваш storage. Заглушка ниже читает файл с диска —
         замените на реальный S3/Minio вызов.
         """
-        # Заглушка для локальной разработки — читает с диска.
-        # В проде: вызов S3/Minio клиента.
-        from pathlib import Path
         try:
-            return Path(storage_key).read_bytes()
-        except Exception:
+            return (self._root / storage_key).read_bytes()
+        except OSError:
             return None
 
 
@@ -97,8 +97,9 @@ _storage_client: StorageClient | None = None
 def get_storage_client() -> StorageClient:
     global _storage_client
     if _storage_client is None:
-        # В проде — инициализация из настроек (endpoint, bucket, credentials).
-        _storage_client = StorageClient(bucket="")
+        from app.config import get_settings
+
+        _storage_client = StorageClient(root=get_settings().storage_path)
     return _storage_client
 
 
@@ -111,6 +112,7 @@ def set_storage_client(client: StorageClient) -> None:
 # ============================================================================
 # AsyncSqlAlchemyRepository — реализация Repository под ваши модели
 # ============================================================================
+
 
 class AsyncSqlAlchemyRepository(Repository):
     """Реализация Repository под async SQLAlchemy и ваши модели.
@@ -135,6 +137,7 @@ class AsyncSqlAlchemyRepository(Repository):
     async def _check_file_owner(self, file_id: str, owner_id: str) -> bool:
         """Проверяет, что файл принадлежит пользователю через Subject.user_id."""
         from app.models import DocumentFile, Subject
+
         stmt = (
             select(Subject.user_id)
             .join(DocumentFile, DocumentFile.subject_id == Subject.id)
@@ -145,8 +148,9 @@ class AsyncSqlAlchemyRepository(Repository):
 
     # ---------- Файлы ----------
 
-    async def get_file(self, file_id: str) -> Optional[FileRecord]:
+    async def get_file(self, file_id: str) -> FileRecord | None:
         from app.models import DocumentFile
+
         f = await self.db.get(DocumentFile, uuid.UUID(file_id))
         if f is None:
             return None
@@ -160,19 +164,26 @@ class AsyncSqlAlchemyRepository(Repository):
             error=f.error,
         )
 
-    async def get_pdf_bytes(self, file_id: str) -> Optional[bytes]:
+    async def get_pdf_bytes(self, file_id: str) -> bytes | None:
         """Скачивает бинарь PDF из S3/Minio по storage_key файла."""
         from app.models import DocumentFile
+
         f = await self.db.get(DocumentFile, uuid.UUID(file_id))
         if f is None or not f.storage_key:
             return None
         return await self.storage.download(f.storage_key)
 
-    async def set_file_status(self, file_id: str, status: str, *,
-                              doc_type: Optional[str] = None,
-                              error: Optional[str] = None) -> None:
+    async def set_file_status(
+        self,
+        file_id: str,
+        status: str,
+        *,
+        doc_type: str | None = None,
+        error: str | None = None,
+    ) -> None:
         from app.models import DocumentFile
-        values: dict = {"status": status}
+
+        values: dict[str, object] = {"status": status}
         if doc_type is not None:
             values["doc_type"] = doc_type
         if error is not None:
@@ -185,6 +196,7 @@ class AsyncSqlAlchemyRepository(Repository):
     async def list_files_of_subject(self, subject_id: str, owner_id: str) -> list[FileRecord]:
         """Файлы предмета, принадлежащие пользователю (через Subject.user_id)."""
         from app.models import DocumentFile, Subject
+
         stmt = (
             select(DocumentFile)
             .join(Subject, DocumentFile.subject_id == Subject.id)
@@ -197,9 +209,13 @@ class AsyncSqlAlchemyRepository(Repository):
         result = await self.db.scalars(stmt)
         return [
             FileRecord(
-                id=str(f.id), subject_id=str(f.subject_id), filename=f.filename,
-                storage_key=f.storage_key, status=f.status,
-                doc_type=f.doc_type, error=f.error,
+                id=str(f.id),
+                subject_id=str(f.subject_id),
+                filename=f.filename,
+                storage_key=f.storage_key,
+                status=f.status,
+                doc_type=f.doc_type,
+                error=f.error,
             )
             for f in result
         ]
@@ -209,6 +225,7 @@ class AsyncSqlAlchemyRepository(Repository):
     async def save_summary(self, file_id: str, text: str, key_terms: list[str]) -> None:
         """Сохраняет конспект в поля файла."""
         from app.models import DocumentFile
+
         await self.db.execute(
             update(DocumentFile)
             .where(DocumentFile.id == uuid.UUID(file_id))
@@ -216,8 +233,9 @@ class AsyncSqlAlchemyRepository(Repository):
         )
         await self.db.commit()
 
-    async def get_summary(self, file_id: str) -> Optional[dict]:
+    async def get_summary(self, file_id: str) -> dict[str, object] | None:
         from app.models import DocumentFile
+
         f = await self.db.get(DocumentFile, uuid.UUID(file_id))
         if f is None or f.summary_text is None:
             return None
@@ -231,8 +249,8 @@ class AsyncSqlAlchemyRepository(Repository):
         subject_id: str,
         owner_id: str,
         title: str,
-        due_date: Optional[str],
-        date_note: Optional[str],
+        due_date: str | None,
+        date_note: str | None,
         requirements: list[str],
         source_page: int,
         source_quote: str,
@@ -240,6 +258,7 @@ class AsyncSqlAlchemyRepository(Repository):
     ) -> str:
         """Создаёт Deadline. owner_id используется только для проверки ownership."""
         from app.models import Deadline
+
         # Проверяем, что файл принадлежит пользователю.
         if not await self._check_file_owner(file_id, owner_id):
             raise PermissionError(f"file_id={file_id} не принадлежит user_id={owner_id}")
@@ -260,10 +279,12 @@ class AsyncSqlAlchemyRepository(Repository):
         await self.db.commit()
         return str(d.id)
 
-    async def get_deadline(self, deadline_id: str) -> Optional[DeadlineRecord]:
+    async def get_deadline(self, deadline_id: str) -> DeadlineRecord | None:
         from app.models import Deadline
+
         d = await self.db.get(
-            Deadline, uuid.UUID(deadline_id),
+            Deadline,
+            uuid.UUID(deadline_id),
             options=[selectinload(Deadline.related_files)],
         )
         if d is None:
@@ -272,6 +293,7 @@ class AsyncSqlAlchemyRepository(Repository):
 
     async def list_deadlines_of_file(self, file_id: str, owner_id: str) -> list[DeadlineRecord]:
         from app.models import Deadline, DocumentFile, Subject
+
         stmt = (
             select(Deadline)
             .join(DocumentFile, Deadline.file_id == DocumentFile.id)
@@ -300,12 +322,10 @@ class AsyncSqlAlchemyRepository(Repository):
             .values(summary_text=None, summary_key_terms=None)
         )
         # 2. Удаляем дедлайны файла (M2M related_files очистится каскадно через ondelete CASCADE).
-        await self.db.execute(
-            delete(Deadline).where(Deadline.file_id == uuid.UUID(file_id))
-        )
+        await self.db.execute(delete(Deadline).where(Deadline.file_id == uuid.UUID(file_id)))
         await self.db.commit()
 
-    def _deadline_to_record(self, d) -> DeadlineRecord:
+    def _deadline_to_record(self, d: Deadline) -> DeadlineRecord:
         return DeadlineRecord(
             id=str(d.id),
             file_id=str(d.file_id),
@@ -322,14 +342,17 @@ class AsyncSqlAlchemyRepository(Repository):
 
     # ---------- Связи дедлайн ↔ файлы (M2M через deadline_related_files) ----------
 
-    async def link_related_files(self, deadline_id: str, owner_id: str,
-                                 file_ids: list[str]) -> None:
+    async def link_related_files(
+        self, deadline_id: str, owner_id: str, file_ids: list[str]
+    ) -> None:
         """Добавляет файлы в deadline.related_files.
         Файлы проверяются на ownership через subject.user_id.
         """
         from app.models import Deadline, DocumentFile, Subject
+
         d = await self.db.get(
-            Deadline, uuid.UUID(deadline_id),
+            Deadline,
+            uuid.UUID(deadline_id),
             options=[selectinload(Deadline.related_files)],
         )
         if d is None:

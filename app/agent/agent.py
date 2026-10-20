@@ -17,14 +17,14 @@ StateGraph:
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
-from langgraph.prebuilt import ToolNode
 from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode
 from typing_extensions import TypedDict
 
 from . import tracing
@@ -33,12 +33,12 @@ from .repository import Repository
 from .tools import build_tools
 from .tracing import logger
 
-
 # ---------- State цикла ----------
+
 
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
-    file_id: str               # UUID
+    file_id: str  # UUID
     run_id: str
     iteration: int
     tool_calls_total: int
@@ -104,6 +104,7 @@ def build_system_prompt(file_id: str) -> str:
 
 # ---------- Создание LLM-клиента ----------
 
+
 def _make_llm() -> ChatOpenAI:
     """Создаёт ChatOpenAI под Ollama или любой OpenAI-совместимый провайдер.
 
@@ -123,25 +124,31 @@ def _make_llm() -> ChatOpenAI:
 
 # ---------- Ноды графа (async) ----------
 
-def _make_agent_node(llm_with_tools, max_iterations: int, repository: Repository,
-                     owner_id: str, run_id: str):
 
+def _make_agent_node(
+    llm_with_tools, max_iterations: int, repository: Repository, owner_id: str, run_id: str
+):
     async def agent_node(state: AgentState) -> dict:
         iteration = state.get("iteration", 0) + 1
         tracing.trace(run_id, "iteration", {"iteration": iteration, "max": max_iterations})
 
         if iteration > max_iterations:
-            tracing.trace(run_id, "error", {
-                "message": f"Превышен лимит итераций ({max_iterations}). Останавливаюсь.",
-            })
+            tracing.trace(
+                run_id,
+                "error",
+                {
+                    "message": f"Превышен лимит итераций ({max_iterations}). Останавливаюсь.",
+                },
+            )
             await repository.set_file_status(
-                state["file_id"], "failed",
+                state["file_id"],
+                "failed",
                 error=f"Превышен лимит итераций ({max_iterations})",
             )
             return {
-                "messages": [AIMessage(content=(
-                    f"Остановлено: превышен лимит итераций ({max_iterations})."
-                ))],
+                "messages": [
+                    AIMessage(content=(f"Остановлено: превышен лимит итераций ({max_iterations})."))
+                ],
                 "iteration": iteration,
             }
 
@@ -153,16 +160,23 @@ def _make_agent_node(llm_with_tools, max_iterations: int, repository: Repository
         resp = await llm_with_tools.ainvoke(messages)
         tool_calls = getattr(resp, "tool_calls", None) or []
         usage = getattr(resp, "usage_metadata", None)
-        tracing.trace(run_id, "agent_call", {
-            "iteration": iteration,
-            "tool_calls": [tc.get("name") for tc in tool_calls],
-            "usage": usage,
-            "content_preview": (resp.content or "")[:300],
-            "messages_in_context": len(messages),
-        })
+        tracing.trace(
+            run_id,
+            "agent_call",
+            {
+                "iteration": iteration,
+                "tool_calls": [tc.get("name") for tc in tool_calls],
+                "usage": usage,
+                "content_preview": (resp.content or "")[:300],
+                "messages_in_context": len(messages),
+            },
+        )
 
-        return {"messages": [resp], "iteration": iteration,
-                "tool_calls_total": state.get("tool_calls_total", 0) + len(tool_calls)}
+        return {
+            "messages": [resp],
+            "iteration": iteration,
+            "tool_calls_total": state.get("tool_calls_total", 0) + len(tool_calls),
+        }
 
     return agent_node
 
@@ -173,10 +187,16 @@ def _make_tool_node_with_tracing(tools: list[BaseTool], run_id: str):
     class _TracingToolNode(ToolNode):
         async def ainvoke(self, state, config=None, **kw):
             last: AIMessage = state["messages"][-1]
-            for tc in (last.tool_calls or []):
-                tracing.trace(run_id, "tool_call", {
-                    "name": tc.get("name"), "args": tc.get("args"), "id": tc.get("id"),
-                })
+            for tc in last.tool_calls or []:
+                tracing.trace(
+                    run_id,
+                    "tool_call",
+                    {
+                        "name": tc.get("name"),
+                        "args": tc.get("args"),
+                        "id": tc.get("id"),
+                    },
+                )
 
             result = await super().ainvoke(state, config=config, **kw)
             new_msgs = result["messages"] if isinstance(result, dict) else result
@@ -184,9 +204,15 @@ def _make_tool_node_with_tracing(tools: list[BaseTool], run_id: str):
                 if isinstance(m, ToolMessage):
                     content = m.content
                     preview = content[:500] if isinstance(content, str) else str(content)[:500]
-                    tracing.trace(run_id, "tool_result", {
-                        "name": m.name, "tool_call_id": m.tool_call_id, "result": preview,
-                    })
+                    tracing.trace(
+                        run_id,
+                        "tool_result",
+                        {
+                            "name": m.name,
+                            "tool_call_id": m.tool_call_id,
+                            "result": preview,
+                        },
+                    )
             return result
 
     return _TracingToolNode(tools)
@@ -201,8 +227,10 @@ def should_continue(state: AgentState) -> str:
 
 # ---------- Сборка графа ----------
 
-def build_agent_graph(repository: Repository, owner_id: str, run_id: str,
-                      tools: list[BaseTool] | None = None) -> Any:
+
+def build_agent_graph(
+    repository: Repository, owner_id: str, run_id: str, tools: list[BaseTool] | None = None
+) -> Any:
     """Собирает StateGraph агента с привязкой к конкретному репозиторию."""
     settings = get_settings()
     tools = tools or build_tools(repository, owner_id)
@@ -211,8 +239,10 @@ def build_agent_graph(repository: Repository, owner_id: str, run_id: str,
     llm_with_tools = llm.bind_tools(tools)
 
     graph = StateGraph(AgentState)
-    graph.add_node("agent", _make_agent_node(llm_with_tools, settings.max_iterations,
-                                             repository, owner_id, run_id))
+    graph.add_node(
+        "agent",
+        _make_agent_node(llm_with_tools, settings.max_iterations, repository, owner_id, run_id),
+    )
     graph.add_node("tools", _make_tool_node_with_tracing(tools, run_id))
     graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
@@ -222,24 +252,37 @@ def build_agent_graph(repository: Repository, owner_id: str, run_id: str,
 
 # ---------- Точка входа: обработать файл ----------
 
-async def process_file(file_id: str, repository: Repository, owner_id: str,
-                       run_id: Optional[str] = None) -> dict:
+
+async def process_file(
+    file_id: str, repository: Repository, owner_id: str, run_id: str | None = None
+) -> dict:
     settings = get_settings()
     run_id = run_id or uuid.uuid4().hex[:12]
 
     meta = await repository.get_file(file_id)
     if meta is None:
         tracing.trace(run_id, "error", {"message": f"file_id={file_id} не найден"})
-        return {"run_id": run_id, "file_id": file_id, "status": "failed",
-                "error": "file not found"}
+        return {"run_id": run_id, "file_id": file_id, "status": "failed", "error": "file not found"}
     await repository.set_file_status(file_id, "processing")
 
-    tracing.trace(run_id, "start", {"file_id": file_id, "owner_id": owner_id,
-                                     "now": settings.now_iso(),
-                                     "model": settings.model_name,
-                                     "is_ollama": settings.is_ollama})
-    logger.info("=== Запуск агента: run_id=%s file_id=%s model=%s ollama=%s ===",
-                run_id, file_id, settings.model_name, settings.is_ollama)
+    tracing.trace(
+        run_id,
+        "start",
+        {
+            "file_id": file_id,
+            "owner_id": owner_id,
+            "now": settings.now_iso(),
+            "model": settings.model_name,
+            "is_ollama": settings.is_ollama,
+        },
+    )
+    logger.info(
+        "=== Запуск агента: run_id=%s file_id=%s model=%s ollama=%s ===",
+        run_id,
+        file_id,
+        settings.model_name,
+        settings.is_ollama,
+    )
 
     try:
         graph = build_agent_graph(repository, owner_id, run_id)
@@ -254,12 +297,11 @@ async def process_file(file_id: str, repository: Repository, owner_id: str,
             initial,
             config={"recursion_limit": settings.max_iterations * 3 + 5},
         )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.exception("Agent failed")
         await repository.set_file_status(file_id, "failed", error=str(e))
         tracing.trace(run_id, "error", {"message": str(e)})
-        return {"run_id": run_id, "file_id": file_id, "status": "failed",
-                "error": str(e)}
+        return {"run_id": run_id, "file_id": file_id, "status": "failed", "error": str(e)}
 
     # Если статус остался 'processing' (агент не вызвал analyze_file),
     # помечаем как processed только если есть конспект.
@@ -269,8 +311,7 @@ async def process_file(file_id: str, repository: Repository, owner_id: str,
         if summary is not None:
             await repository.set_file_status(file_id, "processed")
         else:
-            await repository.set_file_status(file_id, "failed",
-                                             error="Агент не сохранил конспект")
+            await repository.set_file_status(file_id, "failed", error="Агент не сохранил конспект")
 
     meta = await repository.get_file(file_id)
     summary = await repository.get_summary(file_id)
@@ -285,11 +326,15 @@ async def process_file(file_id: str, repository: Repository, owner_id: str,
         "deadlines_saved": len(deadlines),
         "summary_saved": summary is not None,
     }
-    tracing.trace(run_id, "end", {
-        "tool_calls": result["tool_calls"],
-        "deadlines": result["deadlines_saved"],
-        "summary": result["summary_saved"],
-        "iterations": result["iterations"],
-        "status": result["status"],
-    })
+    tracing.trace(
+        run_id,
+        "end",
+        {
+            "tool_calls": result["tool_calls"],
+            "deadlines": result["deadlines_saved"],
+            "summary": result["summary_saved"],
+            "iterations": result["iterations"],
+            "status": result["status"],
+        },
+    )
     return result

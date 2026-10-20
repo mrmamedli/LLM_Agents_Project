@@ -24,8 +24,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from langchain_core.tools import BaseTool, tool
 from langchain_openai import ChatOpenAI
 
@@ -37,8 +35,8 @@ from .schemas import (
     response_format_file_analysis,
 )
 
-
 # ---------- Фабрика инструментов ----------
+
 
 def build_tools(repository: Repository, owner_id: str) -> list[BaseTool]:
     """Создаёт список async-инструментов, замкнутых на repository и owner_id.
@@ -50,7 +48,7 @@ def build_tools(repository: Repository, owner_id: str) -> list[BaseTool]:
     # ---------- read_pdf ----------
 
     @tool
-    async def read_pdf(file_id: str, pages: Optional[list[int]] = None) -> dict:
+    async def read_pdf(file_id: str, pages: list[int] | None = None) -> dict:
         """Читает текст из PDF постранично.
 
         Аргументы:
@@ -63,8 +61,7 @@ def build_tools(repository: Repository, owner_id: str) -> list[BaseTool]:
         # Скачиваем бинарь из S3 через репозиторий.
         pdf_bytes = await repository.get_pdf_bytes(file_id)
         if pdf_bytes is None:
-            return {"file_id": file_id,
-                    "error": f"PDF для file_id={file_id} не найден в storage"}
+            return {"file_id": file_id, "error": f"PDF для file_id={file_id} не найден в storage"}
         return _read_pdf(file_id, pages, pdf_bytes=pdf_bytes)
 
     # ---------- list_materials ----------
@@ -81,16 +78,19 @@ def build_tools(repository: Repository, owner_id: str) -> list[BaseTool]:
         files = await repository.list_files_of_subject(subject_id, owner_id)
         return {
             "subject_id": subject_id,
-            "files": [{"id": f.id, "filename": f.filename,
-                       "status": f.status, "doc_type": f.doc_type} for f in files],
+            "files": [
+                {"id": f.id, "filename": f.filename, "status": f.status, "doc_type": f.doc_type}
+                for f in files
+            ],
             "count": len(files),
         }
 
     # ---------- save_summary ----------
 
     @tool
-    async def save_summary(file_id: str, text: str, key_terms: list[str],
-                           doc_type: Optional[str] = None) -> dict:
+    async def save_summary(
+        file_id: str, text: str, key_terms: list[str], doc_type: str | None = None
+    ) -> dict:
         """Сохраняет конспект в поля файла (summary_text, summary_key_terms)
         и опционально обновляет doc_type.
 
@@ -116,8 +116,8 @@ def build_tools(repository: Repository, owner_id: str) -> list[BaseTool]:
         file_id: str,
         subject_id: str,
         title: str,
-        due_date: Optional[str],
-        date_note: Optional[str],
+        due_date: str | None,
+        date_note: str | None,
         requirements: list[str],
         source_page: int,
         source_quote: str,
@@ -173,8 +173,9 @@ def build_tools(repository: Repository, owner_id: str) -> list[BaseTool]:
     # ---------- extract_deadlines ----------
 
     @tool
-    async def extract_deadlines(page_text: str, source_page: int,
-                                current_date: Optional[str] = None) -> dict:
+    async def extract_deadlines(
+        page_text: str, source_page: int, current_date: str | None = None
+    ) -> dict:
         """Извлекает дедлайны из текста страницы через constrained decoding.
 
         Делает отдельный LLM-вызов с response_format={'type':'json_schema',
@@ -247,9 +248,11 @@ def build_tools(repository: Repository, owner_id: str) -> list[BaseTool]:
         )
         try:
             analysis = parse_file_analysis(resp.content)
-        except Exception as e:  # noqa: BLE001
-            return {"error": f"Не удалось распарсить FileAnalysis: {e}",
-                    "raw": str(resp.content)[:500]}
+        except Exception as e:
+            return {
+                "error": f"Не удалось распарсить FileAnalysis: {e}",
+                "raw": str(resp.content)[:500],
+            }
 
         # Сохраняем конспект в поля файла.
         await repository.save_summary(file_id, analysis.summary, analysis.key_terms)
@@ -295,8 +298,10 @@ def build_tools(repository: Repository, owner_id: str) -> list[BaseTool]:
 
 # ---------- LLM-вызов для extract_deadlines ----------
 
-async def _llm_extract_deadlines(page_text: str, source_page: int | None,
-                                 current_date: str | None) -> dict:
+
+async def _llm_extract_deadlines(
+    page_text: str, source_page: int | None, current_date: str | None
+) -> dict:
     settings = get_settings()
     llm = ChatOpenAI(
         model=settings.model_name,
@@ -323,9 +328,11 @@ async def _llm_extract_deadlines(page_text: str, source_page: int | None,
     )
     try:
         analysis = parse_file_analysis(resp.content)
-    except Exception as e:  # noqa: BLE001
-        return {"error": f"Не удалось распарсить constrained decoding: {e}",
-                "raw": str(resp.content)[:500]}
+    except Exception as e:
+        return {
+            "error": f"Не удалось распарсить constrained decoding: {e}",
+            "raw": str(resp.content)[:500],
+        }
 
     out = []
     for d in analysis.deadlines:

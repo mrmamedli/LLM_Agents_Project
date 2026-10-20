@@ -7,8 +7,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Optional
 
 import pymupdf  # PyMuPDF
 
@@ -37,8 +37,8 @@ def read_pdf(
     file_id: str,
     pages: Iterable[int] | None = None,
     *,
-    pdf_path: Optional[Path] = None,
-    pdf_bytes: Optional[bytes] = None,
+    pdf_path: Path | None = None,
+    pdf_bytes: bytes | None = None,
 ) -> dict:
     """Читает указанные страницы PDF и возвращает текст постранично.
 
@@ -51,15 +51,14 @@ def read_pdf(
     truncated, pages:[{page, chars, text}]} — либо {file_id, error}.
     """
     if pdf_path is None and pdf_bytes is None:
-        return {"file_id": file_id,
-                "error": "Не передан ни pdf_path, ни pdf_bytes"}
+        return {"file_id": file_id, "error": "Не передан ни pdf_path, ни pdf_bytes"}
 
     try:
         if pdf_path is not None:
             doc = pymupdf.open(pdf_path)
         else:
             doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return {"file_id": file_id, "error": f"Не удалось открыть PDF: {e}"}
 
     total = doc.page_count
@@ -89,8 +88,7 @@ def read_pdf(
     }
 
 
-def page_count(*, pdf_path: Optional[Path] = None,
-               pdf_bytes: Optional[bytes] = None) -> int | None:
+def page_count(*, pdf_path: Path | None = None, pdf_bytes: bytes | None = None) -> int | None:
     """Быстро возвращает количество страниц в PDF."""
     try:
         if pdf_path is not None:
@@ -102,5 +100,5 @@ def page_count(*, pdf_path: Optional[Path] = None,
         n = doc.page_count
         doc.close()
         return n
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None

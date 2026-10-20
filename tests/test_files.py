@@ -12,7 +12,12 @@ from tests.conftest import AuthorizedSession, AuthorizedSessionFactory, TestSess
 @pytest.fixture
 def processed_file_ids(monkeypatch: pytest.MonkeyPatch) -> list[UUID]:
     processed: list[UUID] = []
-    monkeypatch.setattr("app.routers.agent._run_agent_background", processed.append)
+
+    async def record_processed_file(file_id: UUID, user_id: UUID) -> None:
+        del user_id
+        processed.append(file_id)
+
+    monkeypatch.setattr("app.routers.files._run_agent_background", record_processed_file)
     return processed
 
 

@@ -1,31 +1,33 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db import SessionLocal
 from app.models import DocumentFile, Subject
 from app.security import CurrentUser, DatabaseSession
 
 router = APIRouter(prefix="/api/agent", tags=["Agent"])
 
+
 class AgentRunRequest(BaseModel):
     file_id: uuid.UUID
     sync: bool = False
 
+
 class AgentRunResponse(BaseModel):
     file_id: uuid.UUID
     status: str
-    run_id: Optional[str] = None
-    iterations: Optional[int] = None
-    tool_calls: Optional[int] = None
-    deadlines_saved: Optional[int] = None
-    summary_saved: Optional[bool] = None
-    error: Optional[str] = None
+    run_id: str | None = None
+    iterations: int | None = None
+    tool_calls: int | None = None
+    deadlines_saved: int | None = None
+    summary_saved: bool | None = None
+    error: str | None = None
+
 
 async def _run_agent_background(file_id: uuid.UUID, user_id: uuid.UUID) -> dict:
     from app.agent.agent import process_file
@@ -38,6 +40,7 @@ async def _run_agent_background(file_id: uuid.UUID, user_id: uuid.UUID) -> dict:
             repository=repo,
             owner_id=str(user_id),
         )
+
 
 @router.post(
     "/run",
@@ -60,6 +63,7 @@ async def run_agent(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found")
 
     from app.agent.integration import AsyncSqlAlchemyRepository
+
     repo = AsyncSqlAlchemyRepository(db)
     await repo.clear_file_results(str(f.id), str(current_user.id))
     await repo.set_file_status(str(f.id), "uploaded", error=None)

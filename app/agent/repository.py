@@ -20,40 +20,43 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Protocol, runtime_checkable
-
+from typing import Protocol, runtime_checkable
 
 # ---------- DTO: то, что агент получает от репозитория ----------
+
 
 @dataclass
 class FileRecord:
     """Метаданные файла — соответствует DocumentFile + нужные агенту поля."""
-    id: str                       # UUID (как строка для совместимости с tool-схемой)
-    subject_id: str               # UUID
+
+    id: str  # UUID (как строка для совместимости с tool-схемой)
+    subject_id: str  # UUID
     filename: str
-    storage_key: str              # ключ в S3/Minio (для скачивания бинаря)
-    status: str                   # 'uploaded' | 'processing' | 'processed' | 'failed'
-    doc_type: Optional[str] = None
-    error: Optional[str] = None
+    storage_key: str  # ключ в S3/Minio (для скачивания бинаря)
+    status: str  # 'uploaded' | 'processing' | 'processed' | 'failed'
+    doc_type: str | None = None
+    error: str | None = None
 
 
 @dataclass
 class DeadlineRecord:
     """Дедлайн — соответствует модели Deadline."""
+
     id: str
     file_id: str
     subject_id: str
     title: str
-    due_date: Optional[str]       # ISO 'YYYY-MM-DD' или None
-    date_note: Optional[str]
+    due_date: str | None  # ISO 'YYYY-MM-DD' или None
+    date_note: str | None
     requirements: list[str] = field(default_factory=list)
-    source_page: int = 1          # не null в вашей схеме — по умолчанию 1
+    source_page: int = 1  # не null в вашей схеме — по умолчанию 1
     source_quote: str = ""
     status: str = "pending"
     related_file_ids: list[str] = field(default_factory=list)
 
 
 # ---------- Protocol репозитория ----------
+
 
 @runtime_checkable
 class Repository(Protocol):
@@ -64,21 +67,26 @@ class Repository(Protocol):
 
     # ---- Файлы ----
 
-    async def get_file(self, file_id: str) -> Optional[FileRecord]:
+    async def get_file(self, file_id: str) -> FileRecord | None:
         """Возвращает метаданные файла или None.
         Owner проверяется отдельно через owner_id в вызывающем коде.
         """
         ...
 
-    async def get_pdf_bytes(self, file_id: str) -> Optional[bytes]:
+    async def get_pdf_bytes(self, file_id: str) -> bytes | None:
         """Скачивает бинарь PDF из S3/Minio по storage_key и возвращает bytes.
         Возвращает None, если файл не найден или не удалось скачать.
         """
         ...
 
-    async def set_file_status(self, file_id: str, status: str, *,
-                              doc_type: Optional[str] = None,
-                              error: Optional[str] = None) -> None:
+    async def set_file_status(
+        self,
+        file_id: str,
+        status: str,
+        *,
+        doc_type: str | None = None,
+        error: str | None = None,
+    ) -> None:
         """Обновляет статус файла. doc_type/error передаются только если не None.
         Также если status='processed' и есть summary — он уже сохранён ранее.
         """
@@ -96,7 +104,7 @@ class Repository(Protocol):
         """Сохраняет конспект в поля DocumentFile.summary_text / summary_key_terms."""
         ...
 
-    async def get_summary(self, file_id: str) -> Optional[dict]:
+    async def get_summary(self, file_id: str) -> dict | None:
         """Возвращает {text, key_terms} из полей файла, или None если конспекта нет."""
         ...
 
@@ -108,8 +116,8 @@ class Repository(Protocol):
         subject_id: str,
         owner_id: str,
         title: str,
-        due_date: Optional[str],
-        date_note: Optional[str],
+        due_date: str | None,
+        date_note: str | None,
         requirements: list[str],
         source_page: int,
         source_quote: str,
@@ -118,7 +126,7 @@ class Repository(Protocol):
         """Создаёт Deadline, возвращает его UUID как строку."""
         ...
 
-    async def get_deadline(self, deadline_id: str) -> Optional[DeadlineRecord]:
+    async def get_deadline(self, deadline_id: str) -> DeadlineRecord | None:
         """Возвращает дедлайн по UUID или None."""
         ...
 
@@ -136,8 +144,9 @@ class Repository(Protocol):
 
     # ---- Связи дедлайн ↔ файлы (M2M через deadline_related_files) ----
 
-    async def link_related_files(self, deadline_id: str, owner_id: str,
-                                 file_ids: list[str]) -> None:
+    async def link_related_files(
+        self, deadline_id: str, owner_id: str, file_ids: list[str]
+    ) -> None:
         """Добавляет file_ids в deadline.related_files.
         Пропускает file_id, не принадлежащие owner_id (проверка через subject.user_id).
         """

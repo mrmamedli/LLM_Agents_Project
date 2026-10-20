@@ -31,7 +31,9 @@ from zoneinfo import ZoneInfo
 def _env(key: str, default: str | None = None, *, required: bool = False) -> str:
     val = os.getenv(key, default)
     if required and not val:
-        raise RuntimeError(f"Env-переменная {key} не задана. Скопируйте .env.example → .env и заполните.")
+        raise RuntimeError(
+            f"Env-переменная {key} не задана. Скопируйте .env.example → .env и заполните."
+        )
     return val  # type: ignore[return-value]
 
 
@@ -70,7 +72,7 @@ class Settings:
     @property
     def is_ollama(self) -> bool:
         """True если базовый URL указывает на локальную Ollama."""
-        return "localhost:11434" in self.base_url or "127.0.0.1:11434" in self.base_url
+        return "ollama:11434" in self.base_url or "127.0.0.1:11434" in self.base_url
 
 
 def load_settings() -> Settings:
@@ -79,7 +81,7 @@ def load_settings() -> Settings:
     return Settings(
         api_key=_env("OPENAI_API_KEY",default="ollama", required=True),
         # По умолчанию — локальная Ollama.
-        base_url=_env("OPENAI_BASE_URL", "http://localhost:11434/v1"),
+        base_url=_env("OPENAI_BASE_URL", "http://ollama:11434/v1"),
         # По умолчанию — qwen2.5:7b (хорошо работает с tool-calling и русским).
         model_name=_env("MODEL_NAME", "qwen2.5:latest"),
         tz_name=_env("TZ", "Europe/Moscow"),
@@ -88,6 +90,7 @@ def load_settings() -> Settings:
         use_structured_output=_env_bool("USE_STRUCTURED_OUTPUT", False),
     )
 
+
 _settings: Settings | None = None
 
 
@@ -95,8 +98,10 @@ def get_settings() -> Settings:
     global _settings
     if _settings is None:
         from dotenv import load_dotenv
+
         load_dotenv()
         _settings = load_settings()
+    print(_settings)
     return _settings
 
 

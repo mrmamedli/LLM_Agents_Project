@@ -1,7 +1,6 @@
 from typing import Annotated
 from uuid import UUID
 
-from app.routers.agent import _run_agent_background
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -17,6 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import Settings, get_settings
 from app.models import Deadline, DocumentFile, Subject, deadline_related_files
+from app.routers.agent import _run_agent_background
 from app.schemas import DeadlineOut, FileCard, FileOut, SummaryOut
 from app.security import CurrentUser, DatabaseSession
 from app.services.storage import delete_file, save_upload
@@ -109,7 +109,7 @@ async def upload_subject_file(
         delete_file(settings.storage_path, storage_key)
         raise
 
-    background_tasks.add_task(_run_agent_background, id, current_user.id)
+    background_tasks.add_task(_run_agent_background, document.id, current_user.id)
     return document
 
 
